@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fixture exercising the XSD 1.1 data-model features added to xsdstyle:
+    - xs:assert
+    - xs:alternative (conditional type assignment)
+    - xs:any / xs:anyAttribute notNamespace + notQName
+    - xs:schema @defaultAttributes + complexType @defaultAttributesApply
+  The companion file xsd11-base.xsd is included via xs:override so the
+  override walk + overridden-badge can be exercised end-to-end.
+-->
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:t="urn:xsdstyle:test"
+  targetNamespace="urn:xsdstyle:test"
+  elementFormDefault="qualified"
+  defaultAttributes="t:CommonAttrs"
+  vc:minVersion="1.1"
+  xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">
+  <xs:annotation>
+    <xs:documentation>
+      Fixture: every component below targets a single XSD 1.1 feature that
+      xsdstyle adds rendering for.
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:override schemaLocation="xsd11-base.xsd">
+    <xs:complexType name="BaseRecord">
+      <xs:annotation>
+        <xs:documentation>Overridden BaseRecord — adds a required @revision attribute.</xs:documentation>
+      </xs:annotation>
+      <xs:sequence>
+        <xs:element name="payload" type="xs:string" />
+      </xs:sequence>
+      <xs:attribute name="revision" type="xs:positiveInteger" use="required" />
+    </xs:complexType>
+  </xs:override>
+
+  <xs:attributeGroup name="CommonAttrs">
+    <xs:attribute name="id" type="xs:ID" />
+    <xs:attribute name="lang" type="xs:language" />
+  </xs:attributeGroup>
+
+  <!-- Inherits the schema's default attribute group. -->
+  <xs:complexType name="Document">
+    <xs:annotation>
+      <xs:documentation>Document type — receives default attributes implicitly.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="title" type="xs:string" />
+      <xs:element name="body" type="xs:string" />
+    </xs:sequence>
+    <xs:assert test="string-length(title) gt 0" xpathDefaultNamespace="##targetNamespace">
+      <xs:annotation>
+        <xs:documentation>title must not be empty.</xs:documentation>
+      </xs:annotation>
+    </xs:assert>
+    <xs:assert test="body ne title" />
+  </xs:complexType>
+
+  <!-- Suppresses default attributes. -->
+  <xs:complexType name="OpaqueBlob" defaultAttributesApply="false">
+    <xs:annotation>
+      <xs:documentation>Opaque blob — opts out of default attributes.</xs:documentation>
+    </xs:annotation>
+    <xs:simpleContent>
+      <xs:extension base="xs:base64Binary">
+        <xs:attribute name="encoding" type="xs:string" use="optional" />
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- Conditional type assignment via xs:alternative. -->
+  <xs:element name="message" type="xs:anyType">
+    <xs:alternative test="@kind = 'doc'" type="t:Document" />
+    <xs:alternative test="@kind = 'blob'" type="t:OpaqueBlob" />
+    <xs:alternative type="xs:string">
+      <xs:annotation>
+        <xs:documentation>Fallback default alternative.</xs:documentation>
+      </xs:annotation>
+    </xs:alternative>
+  </xs:element>
+
+  <!--
+    Two-level extension chain (Grandparent -> Parent -> Child) for
+    exercising the recursive inherited-content render, plus a
+    restriction example for the "restricts" badge.
+  -->
+  <xs:complexType name="Grandparent">
+    <xs:annotation>
+      <xs:documentation>Root of the chain. Contributes @id and a created element.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="created" type="xs:dateTime" />
+    </xs:sequence>
+    <xs:attribute name="ref" type="xs:anyURI" />
+  </xs:complexType>
+
+  <xs:complexType name="Parent">
+    <xs:annotation>
+      <xs:documentation>Mid-chain: extends Grandparent, adds @author and a title.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="t:Grandparent">
+        <xs:sequence>
+          <xs:element name="title" type="xs:string" />
+        </xs:sequence>
+        <xs:attribute name="author" type="xs:string" />
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="Child">
+    <xs:annotation>
+      <xs:documentation>Leaf: extends Parent. Visible content should fold in both ancestors.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="t:Parent">
+        <xs:sequence>
+          <xs:element name="body" type="xs:string" />
+        </xs:sequence>
+        <xs:attribute name="status" type="xs:string" />
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="ConstrainedChild">
+    <xs:annotation>
+      <xs:documentation>Restricts Parent. Base content is shown for context, not as effective content.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:restriction base="t:Parent">
+        <xs:sequence>
+          <xs:element name="created" type="xs:dateTime" />
+          <xs:element name="title" type="xs:string" />
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <!-- xs:any with 1.1 notNamespace + notQName, plus ##defined token. -->
+  <xs:complexType name="Envelope">
+    <xs:sequence>
+      <xs:any
+        namespace="##other"
+        notNamespace="urn:xsdstyle:forbidden"
+        notQName="##defined t:message"
+        processContents="lax"
+        minOccurs="0"
+        maxOccurs="unbounded" />
+    </xs:sequence>
+    <xs:anyAttribute notNamespace="urn:xsdstyle:internal" notQName="##defined" processContents="skip" />
+  </xs:complexType>
+</xs:schema>

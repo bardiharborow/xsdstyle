@@ -1,0 +1,6 @@
+out/
+.idea/
+.tools/
+test/xspec/
+specifications/
+reference/

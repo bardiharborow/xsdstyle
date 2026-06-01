@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Conditional-inclusion (vc:*) fixture.
+
+  Exercises XSD 1.1 Appendix F:
+    vc:minVersion        gate by minimum schema version
+    vc:maxVersion        gate by exclusive maximum schema version
+    vc:typeAvailable     gate by availability of a named type
+    vc:typeUnavailable   gate by absence of a named type
+    vc:facetAvailable    gate by availability of a named facet
+    vc:facetUnavailable  gate by absence of a named facet
+
+  xsdstyle DISPLAYS these attributes but never filters components on them,
+  so every gated component is still present in the output.
+-->
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+  targetNamespace="urn:xsdstyle:test:vc"
+  xmlns="urn:xsdstyle:test:vc"
+  elementFormDefault="qualified"
+  vc:minVersion="1.1">
+  <xs:annotation>
+    <xs:documentation>
+      Schema-level vc:minVersion declares the whole document is XSD 1.1.
+      Individual components below carry finer-grained vc:* gates.
+    </xs:documentation>
+  </xs:annotation>
+
+  <!-- Gated by vc:minVersion only; emits a single vc:* badge. -->
+  <xs:element name="modernMessage" type="xs:string" vc:minVersion="1.1" />
+
+  <!-- Range gate: included only in [1.1, 2.0). -->
+  <xs:element name="rangedMessage" type="xs:string" vc:minVersion="1.1" vc:maxVersion="2.0" />
+
+  <!-- typeAvailable gate: requires xs:dateTimeStamp (XSD 1.1) to be available. -->
+  <xs:element name="timestamp" type="xs:dateTimeStamp" vc:typeAvailable="xs:dateTimeStamp" />
+
+  <!-- typeUnavailable + facetUnavailable demonstration. -->
+  <xs:element
+    name="legacyDate"
+    type="xs:date"
+    vc:typeUnavailable="xs:dateTimeStamp"
+    vc:facetUnavailable="xs:assertion" />
+
+  <!-- vc:* on a complex type and its nested attribute. -->
+  <xs:complexType name="VersionedRecord" vc:minVersion="1.1">
+    <xs:sequence>
+      <xs:element name="payload" type="xs:string" />
+    </xs:sequence>
+    <xs:attribute name="revision" type="xs:integer" use="required" vc:facetAvailable="xs:assertion" />
+  </xs:complexType>
+</xs:schema>

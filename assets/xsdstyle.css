@@ -1,0 +1,1291 @@
+/* xsdstyle — BEM stylesheet for XSD 1.1 documentation pages.
+   No bundler, no preprocessor. Light/dark via prefers-color-scheme.
+   Class naming: BEM — block, block__element, block--modifier.
+   Bidi: layout uses CSS logical properties throughout, so setting
+   dir="rtl" on <html> (or any ancestor) flips the chrome automatically.
+   XSD source and inline code stay LTR regardless of page direction. */
+
+/* ===== Custom properties / theme tokens =====
+   Palette: Tailwind. Neutrals use the slate scale. Kind colors sit at the
+   800/900 shade on light backgrounds and 200/300 shades on dark — chosen so
+   every text/background pair clears WCAG AAA (7:1 for normal text). Tints
+   derive from base tokens via color-mix() so they automatically track the
+   active theme. */
+
+:root {
+  /* Neutrals (slate) */
+  --bg: #ffffff;
+  --bg-muted: #f8fafc; /* slate-50 */
+  --bg-card: #ffffff;
+  --bg-code: #f1f5f9; /* slate-100 */
+  --fg: #0f172a; /* slate-900 */
+  --fg-muted: #334155; /* slate-700 */
+  --fg-subtle: #475569; /* slate-600 */
+  --border: #e2e8f0; /* slate-200 */
+  --border-strong: #cbd5e1; /* slate-300 */
+
+  /* Interactive. --accent paints text/borders on neutral backgrounds; for
+     badge/skip-link fills with white text use --accent-solid instead. */
+  --link: #1e40af; /* blue-800 */
+  --link-hover: #1e3a8a; /* blue-900 */
+  --accent: #5b21b6; /* violet-800 — focus, :target, state badges */
+  --accent-solid: #5b21b6; /* violet-800 — fill backing white text */
+  --on-accent: #ffffff;
+
+  /* Danger */
+  --danger: #dc2626; /* red-600 — feeds tints only, not direct text */
+  --danger-strong: #7f1d1d; /* red-900 */
+
+  /* Component kind colors — spread across the hue wheel for distinguishability.
+     The -text variants are used when a kind color paints text (not a badge fill
+     or border); they flip to a lighter shade in dark mode for readability. */
+  --c-element: #0c4a6e; /* sky-900 */
+  --c-element-text: var(--c-element);
+  --c-complex-type: #312e81; /* indigo-900 */
+  --c-complex-type-text: var(--c-complex-type);
+  --c-simple-type: #064e3b; /* emerald-900 */
+  --c-simple-type-text: var(--c-simple-type);
+  --c-attribute: #7c2d12; /* orange-900 */
+  --c-attribute-text: var(--c-attribute);
+  --c-attribute-group: #701a75; /* fuchsia-900 */
+  --c-attribute-group-text: var(--c-attribute-group);
+  --c-group: #44403c; /* stone-700 */
+  --c-group-text: var(--c-group);
+  --c-notation: #334155; /* slate-700 */
+  --c-notation-text: var(--c-notation);
+
+  /* Open-content / categorical badges — kept constant across modes so badge
+     fills with white text stay AAA in either theme (mirrors the kind colors). */
+  --badge-interleave: #1e40af; /* blue-800 */
+  --badge-suffix: #14532d; /* green-900 */
+  --badge-none: #475569; /* slate-600 */
+  --badge-redefined: var(--c-attribute);
+
+  /* Compositor labels (sequence / choice / all) — white text on the lightest
+     shade of each hue that still clears 7:1 (the 800 shade) so the three chips
+     read with maximum hue distinctness in both modes. */
+  --compositor-sequence-bg: #1e40af; /* blue-800 */
+  --compositor-sequence-fg: var(--on-accent);
+  --compositor-choice-bg: #92400e; /* amber-800 */
+  --compositor-choice-fg: var(--on-accent);
+  --compositor-all-bg: #065f46; /* emerald-800 */
+  --compositor-all-fg: var(--on-accent);
+
+  /* Operator-keyword labels (union / list / extension / restriction) — same
+     family as compositors, kept constant across modes so the chips read
+     identically in light and dark. All TW-800 shades, hue-distinct from the
+     compositor trio and the kind colors. */
+  --kw-union-bg: #86198f; /* fuchsia-800 */
+  --kw-union-fg: var(--on-accent);
+  --kw-list-bg: #115e59; /* teal-800 */
+  --kw-list-fg: var(--on-accent);
+  --kw-extension-bg: #155e75; /* cyan-800 */
+  --kw-extension-fg: var(--on-accent);
+  --kw-restriction-bg: #9f1239; /* rose-800 */
+  --kw-restriction-fg: var(--on-accent);
+
+  /* XML/XSD syntax highlighting */
+  --syntax-tag: var(--accent);
+  --syntax-attr: #78350f; /* amber-900 */
+  --syntax-str: var(--c-simple-type);
+  --syntax-comment: var(--fg-muted);
+
+  /* Tints derived from base tokens — track theme automatically */
+  --accent-tint-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-tint-strong: color-mix(in srgb, var(--accent) 25%, transparent);
+  --danger-tint-soft: color-mix(in srgb, var(--danger) 8%, transparent);
+  --danger-tint-strong: color-mix(in srgb, var(--danger) 30%, transparent);
+
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Neutrals (slate) */
+    --bg: #0f172a; /* slate-900 */
+    --bg-muted: #1e293b; /* slate-800 */
+    --bg-card: #1e293b; /* slate-800 */
+    --bg-code: #334155; /* slate-700 */
+    --fg: #f1f5f9; /* slate-100 */
+    --fg-muted: #cbd5e1; /* slate-300 */
+    --fg-subtle: #94a3b8; /* slate-400 */
+    --border: #334155; /* slate-700 */
+    --border-strong: #475569; /* slate-600 */
+
+    /* Interactive — lighter for dark backgrounds. --accent-solid keeps the
+       dark fill so white text on it stays AAA in either mode. */
+    --link: #93c5fd; /* blue-300 */
+    --link-hover: #bfdbfe; /* blue-200 */
+    --accent: #c4b5fd; /* violet-300 */
+    /* --accent-solid inherits the light value (violet-800) on purpose */
+
+    /* Danger — lighter for dark backgrounds */
+    --danger: #fca5a5; /* red-300 */
+    --danger-strong: #fecaca; /* red-200 */
+
+    /* Kind -text variants lighten for readability on dark backgrounds.
+       Kind fill colors stay constant — calibrated for white text in either
+       theme — so badges look the same across modes. Shades chosen so they
+       clear 7:1 on both --bg (slate-900) and --bg-card (slate-800). */
+    --c-element-text: #7dd3fc; /* sky-300 */
+    --c-complex-type-text: #a5b4fc; /* indigo-300 */
+    --c-simple-type-text: #34d399; /* emerald-400 */
+    --c-attribute-text: #fdba74; /* orange-300 */
+    --c-attribute-group-text: #f0abfc; /* fuchsia-300 */
+    --c-group-text: #d6d3d1; /* stone-300 */
+    --c-notation-text: #cbd5e1; /* slate-300 */
+
+    /* Compositor labels share the same dark-fill scheme as light mode. */
+
+    /* Syntax — lighter shades for dark backgrounds; comment overrides the
+       --fg-muted alias to clear 7:1 on --bg-code. */
+    --syntax-tag: #ddd6fe; /* violet-200 */
+    --syntax-attr: #fcd34d; /* amber-300 */
+    --syntax-str: #a7f3d0; /* emerald-200 */
+    --syntax-comment: #e2e8f0; /* slate-200 */
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .doc-collapse__toggle::after {
+    transition: none;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* WCAG 1.4.1 (Use of Color): links embedded in running prose must be
+   distinguishable from surrounding text by something other than colour. */
+p a {
+  text-decoration: underline;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  /* XML/XSD source is LTR even when the surrounding page is RTL. */
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+code {
+  background: var(--bg-code);
+  padding: 0.05em 0.32em;
+  border-radius: var(--radius-sm);
+}
+
+pre {
+  background: var(--bg-code);
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.table-caption-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  transform: translateY(calc(-100% - 1px));
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* ===== Page header ===== */
+
+.page-header {
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 2rem;
+}
+
+.page-header__inner {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.page-header__meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.page-header__meta dt {
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+
+.page-header__meta dd {
+  margin: 0;
+}
+
+.page-header__doc {
+  margin-top: 1rem;
+  color: var(--fg-muted);
+  max-width: 70ch;
+}
+
+/* ===== Layout ===== */
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* ===== Sidebar ===== */
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 0 1rem 1rem 1rem;
+  border-inline-end: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.sidebar__search {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding-top: 1rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+
+.sidebar__search-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.25rem;
+}
+
+.sidebar__search-kbd {
+  display: inline-block;
+  margin-inline-start: 0.4rem;
+  padding: 0 0.35em;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+.sidebar__search-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.95rem;
+  font-family: var(--sans);
+  color: var(--fg);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.sidebar__search-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sidebar__doc-matches {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+.sidebar__doc-matches mark {
+  background: var(--accent-tint-strong);
+  color: inherit;
+}
+
+.sidebar__toc {
+  padding: 0;
+}
+
+.sidebar__toc-group {
+  margin-bottom: 1rem;
+}
+
+.sidebar__toc-group.hidden {
+  display: none;
+}
+
+.sidebar__toc-heading {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin: 0 0 0.4rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.sidebar__toc-count {
+  font-weight: 400;
+  color: var(--fg-subtle);
+}
+
+.sidebar__toc-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar__toc-group li {
+  padding: 0.1rem 0;
+}
+
+.sidebar__toc-group li.hidden {
+  display: none;
+}
+
+.sidebar__toc-group li a {
+  display: block;
+  padding: 0.15rem 0.3rem;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar__toc-group li a.active {
+  background: var(--bg-muted);
+  font-weight: 600;
+}
+
+.sidebar__toc-group li a:hover {
+  background: var(--bg-muted);
+  text-decoration: none;
+}
+
+/* ===== Main content ===== */
+
+.content {
+  padding: 1.5rem 2rem;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .content {
+    padding: 1rem;
+  }
+  .page-header {
+    padding: 1rem;
+  }
+}
+
+/* ===== Overview ===== */
+
+.overview {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+}
+
+.overview__heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.overview__sub-heading {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+
+.overview__xsd11-list {
+  margin: 0;
+  padding-inline-start: 1.2rem;
+}
+
+.overview__xsd11-list li {
+  margin: 0.2rem 0;
+  color: var(--fg);
+}
+
+.overview__default-open-content {
+  margin-top: 1rem;
+}
+
+/* ===== Components ===== */
+
+.components {
+  margin-bottom: 3rem;
+}
+
+.components__heading {
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+/* Per-kind hue on the inline-start border of each card (left in LTR, right in RTL). */
+.components--element {
+  --kind-accent: var(--c-element);
+}
+.components--complex-type {
+  --kind-accent: var(--c-complex-type);
+}
+.components--simple-type {
+  --kind-accent: var(--c-simple-type);
+}
+.components--attribute {
+  --kind-accent: var(--c-attribute);
+}
+.components--attribute-group {
+  --kind-accent: var(--c-attribute-group);
+}
+.components--group {
+  --kind-accent: var(--c-group);
+}
+.components--notation {
+  --kind-accent: var(--c-notation);
+}
+
+.component {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--kind-accent, var(--border-strong));
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  padding: 1.2rem 1.5rem;
+  box-shadow: var(--shadow);
+  scroll-margin-top: 1rem;
+}
+
+.component:target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.component__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--border);
+}
+
+.component__name {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.component__name code {
+  background: transparent;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.component__attr-prefix {
+  color: var(--c-attribute-text);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.component__qname {
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.component__copy-link {
+  margin-inline-start: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+.component__copy-link:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.component__copy-link.copied {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.component__doc {
+  color: var(--fg);
+  margin: 0.75rem 0;
+}
+
+.component__doc-source {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+/* ===== Collapsible long descriptions ===== */
+
+.doc-collapse {
+  position: relative;
+}
+
+.doc-collapse--collapsed .doc-collapse__content {
+  max-height: 9em;
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent);
+  mask-image: linear-gradient(to bottom, #000 65%, transparent);
+}
+
+.doc-collapse__content > :first-child {
+  margin-top: 0;
+}
+
+.doc-collapse__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.doc-collapse__toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.doc-collapse__toggle::after {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  background-color: currentColor;
+  clip-path: polygon(15% 30%, 85% 30%, 50% 75%);
+  transition: transform 0.15s ease;
+}
+
+.doc-collapse--collapsed .doc-collapse__toggle::after {
+  transform: rotate(-90deg);
+}
+
+[dir="rtl"] .doc-collapse--collapsed .doc-collapse__toggle::after {
+  transform: rotate(90deg);
+}
+
+.component__sub-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin: 1rem 0 0.5rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.component__props {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.component__props dt {
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+
+.component__props dd {
+  margin: 0;
+}
+
+.component__model,
+.component__attrs,
+.component__open-content,
+.component__type-alternatives,
+.component__vc-controls,
+.component__see-also,
+.component__assertions,
+.component__derivation-chain,
+.component__identity-constraints,
+.component__inline-type {
+  margin-top: 1rem;
+}
+
+.component__source {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+}
+
+.component__source summary {
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  padding: 0.2rem 0;
+}
+
+.component__source pre {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.component__appinfo {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+/* ===== Badges ===== */
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
+  line-height: 1.6;
+}
+
+.badge--kind {
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.badge--kind-element {
+  background: var(--c-element);
+}
+.badge--kind-complex-type {
+  background: var(--c-complex-type);
+}
+.badge--kind-simple-type {
+  background: var(--c-simple-type);
+}
+.badge--kind-attribute {
+  background: var(--c-attribute);
+}
+.badge--kind-attribute-group {
+  background: var(--c-attribute-group);
+}
+.badge--kind-group {
+  background: var(--c-group);
+}
+.badge--kind-notation {
+  background: var(--c-notation);
+}
+
+.badge--abstract,
+.badge--mixed,
+.badge--nillable,
+.badge--fixed,
+.badge--inheritable {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.badge--redefined,
+.badge--overridden {
+  background: var(--badge-redefined);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.badge--vc-decorated {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.badge--open-content {
+  letter-spacing: normal;
+}
+.badge--open-content--interleave {
+  background: var(--badge-interleave);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.badge--open-content--suffix {
+  background: var(--badge-suffix);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.badge--open-content--none {
+  background: var(--badge-none);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.badge--ic,
+.badge--primary,
+.badge--loaded,
+.badge--appinfo,
+.badge--import,
+.badge--include,
+.badge--redefine,
+.badge--override {
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+}
+
+.badge--defined-in {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: none;
+  letter-spacing: normal;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+  border-style: dashed;
+}
+
+.badge--defined-in + .component__copy-link {
+  margin-inline-start: 0.4rem;
+}
+
+/* ===== Tables ===== */
+
+.attrs,
+.facets,
+.type-alternatives,
+.identity-constraints,
+.vc-controls,
+.schemas__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+.attrs th,
+.attrs td,
+.facets th,
+.facets td,
+.type-alternatives th,
+.type-alternatives td,
+.identity-constraints th,
+.identity-constraints td,
+.vc-controls th,
+.vc-controls td,
+.schemas__table th,
+.schemas__table td {
+  text-align: start;
+  vertical-align: top;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.attrs th,
+.facets th,
+.type-alternatives th,
+.identity-constraints th,
+.vc-controls th,
+.schemas__table th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-muted);
+}
+
+.attrs__row--any td {
+  background: var(--bg-muted);
+}
+
+.attrs__inheritable {
+  text-align: center;
+}
+
+.type-alternatives__row--default td {
+  background: var(--bg-muted);
+}
+
+.type-alternatives__inherited {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.type-alternatives__inherited ul {
+  list-style: disc;
+  margin: 0.3rem 0 0;
+  padding-inline-start: 1.2rem;
+}
+
+/* ===== Content model ===== */
+
+.model {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding-inline-start: 1.2rem;
+  border-inline-start: 1px solid var(--border);
+}
+
+.model__compositor {
+  padding: 0.1rem 0;
+}
+
+.kw-label,
+.model__compositor-label {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-inline-end: 0.5rem;
+}
+
+.model__compositor--sequence > .model__compositor-label {
+  background: var(--compositor-sequence-bg);
+  border-color: var(--compositor-sequence-bg);
+  color: var(--compositor-sequence-fg);
+}
+.model__compositor--choice > .model__compositor-label {
+  background: var(--compositor-choice-bg);
+  border-color: var(--compositor-choice-bg);
+  color: var(--compositor-choice-fg);
+}
+.model__compositor--all > .model__compositor-label {
+  background: var(--compositor-all-bg);
+  border-color: var(--compositor-all-bg);
+  color: var(--compositor-all-fg);
+}
+
+.kw-label--union {
+  background: var(--kw-union-bg);
+  border-color: var(--kw-union-bg);
+  color: var(--kw-union-fg);
+}
+.kw-label--list {
+  background: var(--kw-list-bg);
+  border-color: var(--kw-list-bg);
+  color: var(--kw-list-fg);
+}
+.kw-label--extension {
+  background: var(--kw-extension-bg);
+  border-color: var(--kw-extension-bg);
+  color: var(--kw-extension-fg);
+}
+.kw-label--restriction {
+  background: var(--kw-restriction-bg);
+  border-color: var(--kw-restriction-bg);
+  color: var(--kw-restriction-fg);
+}
+
+.model__particle {
+  padding: 0.15rem 0;
+}
+
+.model__particle-label {
+  font-family: var(--mono);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.model__particle-name {
+  color: var(--c-element-text);
+  background: transparent;
+  font-weight: 500;
+}
+
+.model__particle-type {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.model__particle--open-content {
+  background: var(--accent-tint-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+}
+
+.model__particle-nillable {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 0.9em;
+  margin-inline-start: 0.4rem;
+}
+
+.inline-marker,
+.model__particle-inline {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 0.9em;
+  margin-inline-start: 0.4rem;
+}
+
+.model__inline-type {
+  margin: 0.35rem 0 0.5rem;
+  margin-inline-start: 0.6rem;
+  padding-inline-start: 0.9rem;
+  border-inline-start: 1px dashed var(--border-strong);
+}
+
+/* The dashed border on .model__inline-type already supplies the indent step
+   for the wrapped content, so the immediate inner ul.model shouldn't add a
+   second border + padding on top. */
+.model__inline-type > .inline-complex > ul.model {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.model__inline-type > .inline-complex > .component__derivation-step > p:first-child {
+  margin: 0 0 0.3rem;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+
+.occurs {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 0.9em;
+  margin-inline-start: 0.3rem;
+}
+
+.wildcard code,
+.wildcard-token {
+  background: var(--bg-muted);
+  padding: 0.05em 0.32em;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+}
+
+.wildcard-token {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== Hierarchy ===== */
+
+.hierarchy {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding-inline-start: 1.2rem;
+  border-inline-start: 2px dashed var(--border);
+}
+
+.hierarchy li {
+  padding: 0.15rem 0;
+}
+
+/*
+ * Tree variant: ancestor -> ... -> self -> descendants rendered as nested
+ * <ul>/<li>. Box-drawing characters render the connecting lines so the
+ * tree degrades gracefully when CSS is disabled.
+ */
+.hierarchy--tree,
+.hierarchy--tree .hierarchy__children {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-inline-start: none;
+}
+
+.hierarchy--tree .hierarchy__children {
+  margin-inline-start: 0.55rem;
+  padding-inline-start: 0.85rem;
+  border-inline-start: 1px solid var(--border);
+}
+
+.hierarchy--tree .hierarchy__node {
+  position: relative;
+  padding-block: 0.15rem;
+  padding-inline-start: 0.85rem;
+  padding-inline-end: 0;
+}
+
+.hierarchy--tree .hierarchy__node::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.85em;
+  width: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.hierarchy--tree > .hierarchy__node {
+  padding-inline-start: 0;
+}
+
+.hierarchy--tree > .hierarchy__node::before {
+  content: none;
+}
+
+.hierarchy--tree .hierarchy__node--self > code {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.hierarchy--tree .hierarchy__self-marker {
+  color: var(--fg-muted);
+  font-weight: 400;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+}
+
+/* ===== See-also / open-content / vc-controls panels ===== */
+
+.see-also__group {
+  margin-top: 0.75rem;
+}
+
+.open-content__wildcard {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+}
+
+.open-content__wildcard dt {
+  color: var(--fg-muted);
+}
+
+.open-content__wildcard dd {
+  margin: 0;
+}
+
+.component__open-content-footnote {
+  margin-top: 0.4rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.component__vc-controls-note {
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+/* ===== Refs ===== */
+
+.ref code,
+.ref--external {
+  background: transparent;
+}
+
+.ref {
+  white-space: nowrap;
+}
+.ref--builtin code {
+  color: var(--c-simple-type-text);
+}
+.ref--external {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* ===== XSD source pretty-print ===== */
+
+.xsd-source {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre;
+  /* Lock the pretty-printed XSD to LTR regardless of page direction. */
+  direction: ltr;
+  text-align: start;
+  unicode-bidi: isolate;
+}
+
+.xsd-source .xml-tag {
+  color: var(--syntax-tag);
+}
+.xsd-source .xml-attr {
+  color: var(--syntax-attr);
+}
+.xsd-source .xml-eq {
+  color: var(--syntax-comment);
+}
+.xsd-source .xml-str {
+  color: var(--syntax-str);
+}
+.xsd-source .xml-comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+/* ===== Schemas section ===== */
+
+.schemas__errors {
+  background: var(--danger-tint-soft);
+  border: 1px solid var(--danger-tint-strong);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.schemas__errors h3 {
+  margin: 0 0 0.4rem;
+  color: var(--danger-strong);
+}
+
+/* ===== Print ===== */
+
+@media print {
+  body {
+    font-size: 11pt;
+    color: #000;
+    background: #fff;
+  }
+  .sidebar,
+  .page-header,
+  .page-footer,
+  .component__copy-link,
+  .skip-link {
+    display: none !important;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .component {
+    break-inside: avoid;
+    border: 1px solid #999;
+    box-shadow: none;
+  }
+  details > :not(summary) {
+    display: block !important;
+  }
+  .doc-collapse--collapsed .doc-collapse__content {
+    max-height: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .doc-collapse__toggle {
+    display: none !important;
+  }
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+}
+
+/* ===== Footer ===== */
+
+.page-footer {
+  border-top: 1px solid var(--border);
+  padding: 1rem 2rem;
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}

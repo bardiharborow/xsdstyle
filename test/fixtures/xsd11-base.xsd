@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Base schema overridden by xsd11-features.xsd. The override replaces
+  BaseRecord with a richer definition.
+-->
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:xsdstyle:test"
+  elementFormDefault="qualified">
+  <xs:complexType name="BaseRecord">
+    <xs:annotation>
+      <xs:documentation>Original BaseRecord (will be overridden).</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="payload" type="xs:string" />
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>
