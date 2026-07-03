@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Diagnostics contract: the generated page surfaces a first-class diagnostics
+  section, and each architecture-defined category renders an <li> carrying a
+  stable data-code. Assertions key off data-code (not the localised summary
+  text) so they stay valid under i18n. Multi-document categories (not-schema,
+  traversal-cycle-skipped) use href contexts so relative schemaLocations resolve
+  against the fixture files in test/fixtures/.
+
+  Run via `make test` or `make test XSPEC_TESTS=test/diagnostics.xspec`.
+-->
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  stylesheet="../xsdstyle.xsl"
+  run-as="external">
+  <x:scenario label="invalid parameter values are reported">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="Foo" type="xs:string" />
+      </xs:schema>
+    </x:context>
+    <x:param name="documentation-markup" select="'bogus'" />
+    <x:expect
+      label="an invalid-parameter diagnostic is emitted"
+      test="exists($x:result//*[@data-code eq 'invalid-parameter'])" />
+  </x:scenario>
+
+  <x:scenario label="unknown XSD-namespace elements are reported">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="Foo" type="xs:string" />
+        <xs:bogusElement name="weird" />
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="an unknown-element diagnostic is emitted"
+      test="exists($x:result//*[@data-code eq 'unknown-element'])" />
+  </x:scenario>
+
+  <x:scenario label="recursive group references are reported">
+    <x:context>
+      <xs:schema xmlns:r="urn:example" targetNamespace="urn:example">
+        <xs:group name="G">
+          <xs:sequence>
+            <xs:group ref="r:G" />
+          </xs:sequence>
+        </xs:group>
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="a recursive-expansion-stopped diagnostic is emitted"
+      test="exists($x:result//*[@data-code eq 'recursive-expansion-stopped'])" />
+  </x:scenario>
+
+  <x:scenario label="unresolvable schema documents are reported">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:include schemaLocation="this-file-does-not-exist.xsd" />
+        <xs:element name="Foo" type="xs:string" />
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="a schema-not-loaded diagnostic is emitted"
+      test="exists($x:result//*[@data-code eq 'schema-not-loaded'])" />
+  </x:scenario>
+
+  <x:scenario label="non-schema documents are reported">
+    <x:context href="fixtures/notschema-primary.xsd" />
+    <x:expect label="a not-schema diagnostic is emitted" test="exists($x:result//*[@data-code eq 'not-schema'])" />
+  </x:scenario>
+
+  <x:scenario label="cyclic schema composition is reported">
+    <x:context href="fixtures/cycle-a.xsd" />
+    <x:expect
+      label="a traversal-cycle-skipped diagnostic is emitted"
+      test="exists($x:result//*[@data-code eq 'traversal-cycle-skipped'])" />
+  </x:scenario>
+
+  <x:scenario label="unresolved union member types are reported">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:simpleType name="Mixed">
+          <xs:union memberTypes="Missing xs:string" />
+        </xs:simpleType>
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="a qname-unresolved diagnostic is emitted for the missing member type"
+      test="exists($x:result//*[@data-code eq 'qname-unresolved'])" />
+  </x:scenario>
+
+  <x:scenario label="resolved identity-constraint references produce no diagnostics">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="Defs">
+          <xs:key name="MainKey">
+            <xs:selector xpath="item" />
+            <xs:field xpath="@id" />
+          </xs:key>
+          <xs:keyref name="MainRef" refer="MainKey">
+            <xs:selector xpath="ref" />
+            <xs:field xpath="@idref" />
+          </xs:keyref>
+        </xs:element>
+        <xs:element name="User">
+          <xs:key ref="MainKey" />
+        </xs:element>
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="identity @ref and @refer resolve against identity constraints, not elements"
+      test="empty($x:result//section[@id eq 'diagnostics'])" />
+  </x:scenario>
+
+  <x:scenario label="unresolved identity-constraint references are reported">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="User">
+          <xs:key ref="NoSuchKey" />
+        </xs:element>
+      </xs:schema>
+    </x:context>
+    <x:expect
+      label="a qname-unresolved diagnostic is emitted for the dangling identity reference"
+      test="exists($x:result//*[@data-code eq 'qname-unresolved'])" />
+  </x:scenario>
+
+  <x:scenario label="a clean schema produces no diagnostics section">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="Foo" type="xs:string" />
+      </xs:schema>
+    </x:context>
+    <x:expect label="no diagnostics section is rendered" test="empty($x:result//section[@id eq 'diagnostics'])" />
+  </x:scenario>
+</x:description>

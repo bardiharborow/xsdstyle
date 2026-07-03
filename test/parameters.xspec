@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  stylesheet="../xsdstyle.xsl"
+  run-as="external">
+  <x:scenario label="parameter contract">
+    <x:context>
+      <xs:schema targetNamespace="urn:example">
+        <xs:element name="Foo" type="xs:string">
+          <xs:annotation>
+            <xs:documentation>A documented element.</xs:documentation>
+          </xs:annotation>
+        </xs:element>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="spec parameter names control the shell">
+      <x:param name="page-title" select="'Spec Title'" />
+      <x:param name="asset-base-uri" select="'/assets/v2/'" />
+      <x:param name="interface-language" select="'he'" />
+      <x:param name="robots-noindex" select="true()" />
+      <x:expect
+        label="new parameter names are honored"
+        test="$x:result/@lang eq 'he'
+          and $x:result/@dir eq 'rtl'
+          and normalize-space($x:result/head/title) eq 'Spec Title'
+          and normalize-space($x:result//h1[@id eq 'ov-title']) eq 'Spec Title'
+          and $x:result/head/link[@rel eq 'stylesheet']/@href eq '/assets/v2/xsdstyle.css'
+          and $x:result/head/script[@src][1]/@src eq '/assets/v2/xsdstyle.js'
+          and exists($x:result/head/meta[@name eq 'robots'][@content eq 'noindex'])" />
+    </x:scenario>
+
+    <x:scenario label="show-source controls source listings">
+      <x:param name="show-source" select="false()" />
+      <x:expect label="source disclosures are omitted" test="empty($x:result//details[@data-kind-block eq 'source'])" />
+    </x:scenario>
+
+    <x:scenario label="source listings preserve controlled whitespace">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="source code has no template indentation around the XML fragment"
+        test="let $src := string($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'source']//pre/code)
+          return starts-with($src, '&lt;xs:element')
+            and contains($src, ' name=&quot;Foo&quot;')
+            and contains($src, ' type=&quot;xs:string&quot;')
+            and ends-with($src, '/&gt;&#10;')
+            and not(matches($src, '^\s'))
+            and not(contains($src, '&#10; '))" />
+    </x:scenario>
+
+    <x:scenario label="source listings omit unused namespace declarations">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" xmlns:unused="urn:unused" targetNamespace="urn:example">
+          <xs:simpleType name="T">
+            <xs:restriction base="xs:string" />
+          </xs:simpleType>
+          <xs:element name="Foo" type="tns:T" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="unused prefixes are dropped while prefixes referenced in attribute values survive"
+        test="let $src := string($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'source']//pre/code)
+          return not(contains($src, 'urn:unused'))
+            and not(contains($src, 'jenitennison'))
+            and contains($src, 'xmlns:tns=&quot;urn:example&quot;')" />
+    </x:scenario>
+
+    <x:scenario label="source listings keep declarations used by foreign content">
+      <x:context>
+        <xs:schema xmlns:meta="urn:meta" targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:appinfo>
+                <meta:tool xmlns:meta="urn:meta" />
+              </xs:appinfo>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="a prefix used by an emitted foreign element keeps its declaration"
+        test="let $src := string($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'source']//pre/code)
+          return contains($src, 'xmlns:meta=&quot;urn:meta&quot;') and contains($src, 'meta:tool')" />
+    </x:scenario>
+
+    <x:scenario label="interface-direction overrides language inference">
+      <x:param name="interface-language" select="'en'" />
+      <x:param name="interface-direction" select="'rtl'" />
+      <x:expect label="explicit direction wins" test="$x:result/@lang eq 'en' and $x:result/@dir eq 'rtl'" />
+    </x:scenario>
+
+    <x:scenario label="documentation language fallback is applied">
+      <x:param name="documentation-language" select="'fr'" />
+      <x:expect
+        label="documentation wrapper uses the fallback language"
+        test="$x:result//div[@class eq 'doc is-clampable']/@lang eq 'fr'" />
+    </x:scenario>
+
+    <x:scenario label="per-block xml:lang wins over fallback">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation xml:lang="de">Dokumentation.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:param name="documentation-language" select="'fr'" />
+      <x:expect
+        label="authored xml:lang is preserved"
+        test="$x:result//div[@class eq 'doc is-clampable']/@lang eq 'de'" />
+    </x:scenario>
+
+    <x:scenario label="safe documentation markup strips executable content">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>Intro <b>bold</b> <script>alert(1)</script></xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="allowlisted markup survives and script element is removed"
+        test="exists($x:result//div[@class eq 'doc is-clampable']//b)
+          and empty($x:result//div[@class eq 'doc is-clampable']//script)
+          and contains(string($x:result//div[@class eq 'doc is-clampable']), 'alert(1)')" />
+    </x:scenario>
+
+    <x:scenario label="permissive documentation markup copies source markup">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>Intro <script>alert(1)</script></xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:param name="documentation-markup" select="'permissive'" />
+      <x:expect
+        label="permissive mode preserves script markup"
+        test="exists($x:result//div[@class eq 'doc is-clampable']//script)" />
+    </x:scenario>
+
+    <x:scenario label="permissive markup mode is visibly flagged as unsafe">
+      <x:param name="documentation-markup" select="'permissive'" />
+      <x:expect
+        label="the overview carries an unsafe-mode notice"
+        test="exists($x:result//section[@id eq 'overview']//p[contains-token(@class, 'notice--unsafe')][@role eq 'note'][@data-code eq 'permissive-markup'])" />
+    </x:scenario>
+
+    <x:scenario label="safe markup mode carries no unsafe notice">
+      <x:expect
+        label="no permissive-markup notice is rendered by default"
+        test="empty($x:result//p[@data-code eq 'permissive-markup'])" />
+    </x:scenario>
+
+    <x:scenario label="safe documentation markup keeps headings and block quotes">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>
+                <h3>Usage</h3>
+                <blockquote>Note here.</blockquote>
+              </xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="headings and block quotes are allowlisted prose markup"
+        test="exists($x:result//div[@class eq 'doc is-clampable']//h3)
+          and exists($x:result//div[@class eq 'doc is-clampable']//blockquote)" />
+    </x:scenario>
+
+    <x:scenario label="safe mode does not promote foreign-namespace HTML names">
+      <x:context>
+        <xs:schema targetNamespace="urn:example" xmlns:foo="urn:foo">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>Intro <foo:b>not bold</foo:b></xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="a foreign-namespace b element is not emitted as HTML, its text survives"
+        test="empty($x:result//div[@class eq 'doc is-clampable']//*[local-name() eq 'b'])
+          and contains(string($x:result//div[@class eq 'doc is-clampable']), 'not bold')" />
+    </x:scenario>
+
+    <x:scenario label="safe mode keeps allowlisted attributes and drops the rest">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>
+                <p id="collide" onclick="evil()" class="note" title="hint">Body</p>
+              </xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="class and title survive; id and on* handlers are stripped"
+        test="$x:result//div[@class eq 'doc is-clampable']//p/@class eq 'note'
+          and $x:result//div[@class eq 'doc is-clampable']//p/@title eq 'hint'
+          and empty($x:result//div[@class eq 'doc is-clampable']//p/@id)
+          and empty($x:result//div[@class eq 'doc is-clampable']//p/@onclick)" />
+    </x:scenario>
+
+    <x:scenario label="safe mode neutralizes javascript: links but keeps safe links">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>
+                <a href="javascript:alert(1)">bad</a>
+                <a href="https://example.org/">good</a>
+              </xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="unsafe href dropped (element kept), safe href kept with rel"
+        test="empty($x:result//div[@class eq 'doc is-clampable']//a[. eq 'bad']/@href)
+          and $x:result//div[@class eq 'doc is-clampable']//a[. eq 'good']/@href eq 'https://example.org/'
+          and $x:result//div[@class eq 'doc is-clampable']//a[. eq 'good']/@rel eq 'external noopener noreferrer'" />
+    </x:scenario>
+
+    <x:scenario label="appinfo and source comments are preserved">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <!-- source comment -->
+            <xs:annotation>
+              <xs:appinfo>
+                <tool name="fixture" />
+              </xs:appinfo>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="appinfo disclosure and serialized source comments render"
+        test="exists($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'appinfo']//summary[starts-with(normalize-space(.), 'Appinfo')])
+          and exists($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'appinfo']//pre//span[@class eq 'tok-tag'][. eq 'tool'])
+          and exists($x:result//article[@id eq 'el-Foo']//details[@data-kind-block eq 'source']//span[@class eq 'tok-comment'][contains(., 'source comment')])" />
+    </x:scenario>
+
+    <x:scenario label="documentation blocks are trimmed at the edges">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>
+                First line
+                last line.
+              </xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="leading and trailing whitespace is dropped, interior line breaks survive"
+        test="let $body := $x:result//article[@id eq 'el-Foo']//div[@class eq 'doc__body']
+          return empty($body/node()[1][self::br])
+            and matches(string($body), '^First line')
+            and matches(string($body), 'last line\.$')
+            and exists($body/br)" />
+    </x:scenario>
+
+    <x:scenario label="content-less documentation omits the empty body and toggle">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation source="https://example.org/spec" />
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="the heading and source link stay, but no empty body or hidden toggle is emitted"
+        test="let $article := $x:result//article[@id eq 'el-Foo']
+          return exists($article//section[*[@id eq 'el-Foo-doc-title']])
+            and empty($article//div[contains-token(@class, 'doc__body')])
+            and empty($article//button[contains-token(@class, 'doc__toggle')])
+            and $article//a[@class eq 'component__doc-source']/@href eq 'https://example.org/spec'" />
+    </x:scenario>
+
+    <x:scenario label="whitespace-only documentation renders no doc fragment">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation />
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="no doc wrapper, body, or toggle is emitted for whitespace-only documentation"
+        test="empty($x:result//article[@id eq 'el-Foo']//div[contains-token(@class, 'doc')])
+          and empty($x:result//article[@id eq 'el-Foo']//button[contains-token(@class, 'doc__toggle')])" />
+    </x:scenario>
+
+    <x:scenario label="documentation source links carry an accessible label">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation source="https://example.org/spec">Documented.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="the source anchor keeps its visible text and gains an aria-label"
+        test="let $link := $x:result//article[@id eq 'el-Foo']//a[@class eq 'component__doc-source']
+          return normalize-space($link) eq 'source' and $link/@aria-label eq 'Documentation source'" />
+    </x:scenario>
+
+    <x:scenario label="documentation line breaks are preserved">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Foo" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>First line
+Second line</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="safe documentation text line breaks become br elements"
+        test="exists($x:result//article[@id eq 'el-Foo']//div[@class eq 'doc is-clampable']//br)
+          and contains(string($x:result//article[@id eq 'el-Foo']//div[@class eq 'doc is-clampable']), 'First line')
+          and contains(string($x:result//article[@id eq 'el-Foo']//div[@class eq 'doc is-clampable']), 'Second line')" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

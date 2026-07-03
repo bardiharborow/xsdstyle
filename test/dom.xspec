@@ -1,0 +1,570 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:svg="http://www.w3.org/2000/svg"
+  stylesheet="../xsdstyle.xsl"
+  run-as="external">
+  <x:scenario label="generated DOM contract">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example" elementFormDefault="qualified" version="1.2.3">
+        <xs:annotation>
+          <xs:documentation>Example schema.</xs:documentation>
+        </xs:annotation>
+        <xs:include schemaLocation="common.xsd" />
+        <xs:element name="Order" type="tns:OrderType">
+          <xs:key name="LineKey">
+            <xs:selector xpath="tns:line" />
+            <xs:field xpath="@id" />
+          </xs:key>
+        </xs:element>
+        <xs:complexType name="OrderType">
+          <xs:sequence>
+            <xs:element
+              name="line"
+              type="xs:string"
+              minOccurs="1"
+              maxOccurs="unbounded"
+              nillable="true"
+              default="pending" />
+            <xs:element name="inlineCode" minOccurs="0">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:minLength value="2" />
+                  <xs:maxLength value="8" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:element>
+            <xs:any namespace="##other" minOccurs="0" maxOccurs="unbounded" processContents="lax" />
+          </xs:sequence>
+          <xs:attribute name="id" type="xs:ID" use="required" />
+          <xs:attribute name="code">
+            <xs:simpleType>
+              <xs:restriction base="xs:string">
+                <xs:pattern value="[A-Z]{2}" />
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+        </xs:complexType>
+        <xs:complexType name="ZetaType">
+          <xs:sequence />
+        </xs:complexType>
+        <xs:complexType name="AlphaType">
+          <xs:sequence />
+        </xs:complexType>
+        <xs:simpleType name="Status">
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="new" />
+            <xs:enumeration value="done" />
+          </xs:restriction>
+        </xs:simpleType>
+        <xs:simpleType name="ZetaSimple">
+          <xs:restriction base="xs:string" />
+        </xs:simpleType>
+        <xs:simpleType name="AlphaSimple">
+          <xs:restriction base="xs:string" />
+        </xs:simpleType>
+        <xs:attribute name="lang">
+          <xs:simpleType>
+            <xs:union memberTypes="xs:language">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:union>
+          </xs:simpleType>
+        </xs:attribute>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="page shell and landmarks render">
+      <x:expect
+        label="HTML language, direction, skip link, nav, and main are present"
+        test="$x:result/@lang eq 'en'
+          and $x:result/@dir eq 'ltr'
+          and exists($x:result/body/a[@class eq 'skip-link'][@href eq '#main'])
+          and exists($x:result//nav[@class eq 'sidebar'][@aria-label eq 'Components'])
+          and exists($x:result//main[@id eq 'main'][@tabindex eq '-1'])" />
+    </x:scenario>
+
+    <x:scenario label="overview exposes schema facts">
+      <x:expect
+        label="overview title, metadata, documentation, and schema row are present"
+        test="exists($x:result//section[@id eq 'overview'][@aria-labelledby eq 'ov-title'])
+          and normalize-space($x:result//h1[@id eq 'ov-title']) eq 'Schema: urn:example'
+          and exists($x:result//section[*[@id eq 'overview-metadata-title']]//dt[. eq 'Declared target namespace'])
+          and exists($x:result//div[@class eq 'doc is-clampable'][contains(., 'Example schema.')])
+          and exists($x:result//div[@class eq 'schema-row'][@data-status eq 'loaded'])
+          and exists($x:result//div[@id eq 'schema-edge-1']//span[@class eq 'schema-row__in'][contains(., 'in')])
+          and exists($x:result//span[@class eq 'schema-row__version']//code[. eq '1.2.3'])" />
+    </x:scenario>
+
+    <x:scenario label="table wrappers are keyboard-scrollable tab stops">
+      <x:expect
+        label="every table wrapper is focusable and named after its table caption"
+        test="exists($x:result//div[contains-token(@class, 'tbl-wrap')])
+          and (every $w in $x:result//div[contains-token(@class, 'tbl-wrap')]
+            satisfies ($w/@tabindex eq '0' and $w/@role eq 'group' and normalize-space($w/@aria-label) ne ''))
+          and $x:result//article[@id eq 'ct-OrderType']//div[contains-token(@class, 'tbl-wrap')][table/caption eq 'Attribute uses for OrderType']/@aria-label eq 'Attribute uses for OrderType'
+          and $x:result//article[@id eq 'el-Order']//div[contains-token(@class, 'tbl-wrap')][table/caption eq 'Identity constraints for Order']/@aria-label eq 'Identity constraints for Order'
+          and $x:result//article[@id eq 'st-Status']//div[contains-token(@class, 'tbl-wrap')][table/caption eq 'Constraining facets for Status']/@aria-label eq 'Constraining facets for Status'" />
+    </x:scenario>
+
+    <x:scenario label="component blocks are not landmarks">
+      <x:expect
+        label="article blocks carry no accessible name, keep their headings, and page-level landmark names stay unique"
+        test="empty($x:result//article//section[@aria-labelledby])
+          and exists($x:result//article[@id eq 'el-Order']//section[contains-token(@class, 'block')]/h4[@id eq 'el-Order-props-title'])
+          and exists($x:result//section[@id eq 'overview'][@aria-labelledby eq 'ov-title'])
+          and exists($x:result//section[@id eq 'kind-el'][@aria-labelledby eq 'kind-el-title'])
+          and count($x:result//section[@aria-labelledby])
+            eq count(distinct-values($x:result//section[@aria-labelledby]/@aria-labelledby))" />
+    </x:scenario>
+
+    <x:scenario label="empty-valued schema metadata renders an explicit none marker">
+      <x:context>
+        <xs:schema targetNamespace="urn:example" finalDefault="" version="1.0" />
+      </x:context>
+      <x:expect
+        label="an empty attribute value shows (none) while real values render verbatim"
+        test="let $meta := $x:result//section[*[@id eq 'overview-metadata-title']]
+          return normalize-space($meta//div[dt eq 'finalDefault']/dd/code) eq '(none)'
+            and normalize-space($meta//div[dt eq 'version']/dd/code) eq '1.0'" />
+    </x:scenario>
+
+    <x:scenario label="simple types restricting a builtin expose fundamental facets">
+      <x:expect
+        label="the proplist row carries the spec-vocabulary facet values for the base builtin"
+        test="$x:result//article[@id eq 'st-Status']//dd[contains-token(@class, 'fundamental-facets')]/span[@data-ff eq 'ordered']/code eq 'false'
+          and $x:result//article[@id eq 'st-Status']//dd[contains-token(@class, 'fundamental-facets')]/span[@data-ff eq 'bounded']/code eq 'false'
+          and $x:result//article[@id eq 'st-Status']//dd[contains-token(@class, 'fundamental-facets')]/span[@data-ff eq 'cardinality']/code eq 'countably infinite'
+          and $x:result//article[@id eq 'st-Status']//dd[contains-token(@class, 'fundamental-facets')]/span[@data-ff eq 'numeric']/code eq 'false'" />
+    </x:scenario>
+
+    <x:scenario label="navigation links point at component articles">
+      <x:expect
+        label="canonical groups and component links are emitted"
+        test="exists($x:result//div[@class eq 'nav-group'][@data-kind eq 'element']//a[@href eq '#el-Order'])
+          and exists($x:result//div[@class eq 'nav-group'][@data-kind eq 'complexType']//a[@href eq '#ct-OrderType'])
+          and exists($x:result//div[@class eq 'nav-group'][@data-kind eq 'simpleType']//a[@href eq '#st-Status'])
+          and exists($x:result//*[@id eq 'el-Order'][self::article])
+          and exists($x:result//*[@id eq 'ct-OrderType'][self::article])
+          and exists($x:result//*[@id eq 'st-Status'][self::article])" />
+    </x:scenario>
+
+    <x:scenario label="type components are sorted lexicographically">
+      <x:expect
+        label="complex and simple type nav and article order use names, not source position"
+        test="$x:result//div[@class eq 'nav-group'][@data-kind eq 'complexType']//a[@href eq '#ct-AlphaType']
+	            &lt;&lt; $x:result//div[@class eq 'nav-group'][@data-kind eq 'complexType']//a[@href eq '#ct-ZetaType']
+	          and $x:result//article[@id eq 'ct-AlphaType'] &lt;&lt; $x:result//article[@id eq 'ct-ZetaType']
+	          and $x:result//div[@class eq 'nav-group'][@data-kind eq 'simpleType']//a[@href eq '#st-AlphaSimple']
+	            &lt;&lt; $x:result//div[@class eq 'nav-group'][@data-kind eq 'simpleType']//a[@href eq '#st-ZetaSimple']
+	          and $x:result//article[@id eq 'st-AlphaSimple'] &lt;&lt; $x:result//article[@id eq 'st-ZetaSimple']" />
+    </x:scenario>
+
+    <x:scenario label="component details are structured">
+      <x:expect
+        label="non-duplicative properties, identity constraints, content model, attributes, facets, and source render"
+        test="exists($x:result//article[@id eq 'el-Order']//section[*[@id eq 'el-Order-props-title']])
+          and not(exists($x:result//article[@id eq 'el-Order']//section[*[@id eq 'el-Order-props-title']]//dt[. = ('Name', 'Target namespace', 'nillable')]))
+          and not(exists($x:result//article[@id eq 'st-Status']//section[*[@id eq 'st-Status-props-title']]))
+          and exists($x:result//article[@id eq 'el-Order']//table/caption[contains(., 'Identity constraints')])
+          and exists($x:result//article[@id eq 'ct-OrderType']//div[@class eq 'tree']//span[@data-comp eq 'sequence'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//div[@class eq 'tree']//span[@data-comp eq 'element'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//div[@class eq 'tree']//span[@data-comp eq 'any'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//table/caption[contains(., 'Attribute uses')])
+          and exists($x:result//article[@id eq 'ct-OrderType']//td/span[@class eq 'use use--required'][. eq 'required'])
+          and exists($x:result//article[@id eq 'st-Status']//table/caption[contains(., 'Constraining facets')])
+          and exists($x:result//article[@id eq 'st-Status']//span[@data-flag eq 'enumeration-count'][contains(., '2')])
+          and exists($x:result//article[@id eq 'st-Status']//span[@data-flag eq 'code-list'][. eq 'Code list'])
+          and exists($x:result//article[@id eq 'st-Status']//table[@data-enumeration-count eq '2'][@data-code-list eq 'true'])
+          and exists($x:result//details[@data-kind-block eq 'source'])" />
+    </x:scenario>
+
+    <x:scenario label="identity constraints render kind chips and field lists">
+      <x:expect
+        label="the key row header carries a kind chip and a single field still renders as a list"
+        test="exists($x:result//article[@id eq 'el-Order']//tr[@id eq 'el-Order-k-LineKey']/th[@scope eq 'row']/span[@class eq 'chip'][@data-ic-kind eq 'key'][. eq 'key'])
+          and exists($x:result//article[@id eq 'el-Order']//tr[@id eq 'el-Order-k-LineKey']/td[3]/ul[@class eq 'ic-fields']/li/code[@dir eq 'ltr'][. eq '@id'])" />
+    </x:scenario>
+
+    <x:scenario label="icon SVGs are defined once and referenced via use">
+      <x:expect
+        label="a hidden sprite defines each icon symbol exactly once and icon sites reference it"
+        test="count($x:result/body/div[@hidden]/svg:svg[@class eq 'icon-sprite'][@aria-hidden eq 'true']) eq 1
+          and (every $n in ('ico-expand', 'ico-collapse', 'ico-theme-dark', 'ico-theme-light', 'ico-search', 'ico-copy-link', 'ico-copy-check')
+            satisfies count($x:result//svg:symbol[@id eq $n]) eq 1)
+          and exists($x:result//svg:symbol[@id eq 'ico-copy-link']/svg:path)
+          and exists($x:result//button[@data-toggle-all]/svg:svg[@class eq 'ico-expand'][@aria-hidden eq 'true']/svg:use[@href eq '#ico-expand'])
+          and exists($x:result//button[@data-toggle-all]/svg:svg[@class eq 'ico-collapse']/svg:use[@href eq '#ico-collapse'])
+          and exists($x:result//button[contains-token(@class, 'theme-toggle')]/svg:svg[@data-when eq 'to-dark']/svg:use[@href eq '#ico-theme-dark'])
+          and exists($x:result//button[contains-token(@class, 'theme-toggle')]/svg:svg[@data-when eq 'to-light']/svg:use[@href eq '#ico-theme-light'])
+          and exists($x:result//div[@class eq 'nav-search']/svg:svg/svg:use[@href eq '#ico-search'])
+          and exists($x:result//article[@id eq 'el-Order']//button[@data-copy-link]/svg:svg[@class eq 'copybtn__link']/svg:use[@href eq '#ico-copy-link'])
+          and exists($x:result//article[@id eq 'el-Order']//button[@data-copy-link]/svg:svg[@class eq 'copybtn__check']/svg:use[@href eq '#ico-copy-check'])
+          and not(exists($x:result//button//svg:path))" />
+    </x:scenario>
+
+    <x:scenario label="global attribute declarations render their anonymous type">
+      <x:expect
+        label="the attribute article carries an Anonymous type block with union member references and nested facets"
+        test="exists($x:result//article[@id eq 'at-lang']//section[*[@id eq 'at-lang-inline-type-title']])
+          and normalize-space($x:result//h4[@id eq 'at-lang-inline-type-title']) eq 'Anonymous type'
+          and exists($x:result//article[@id eq 'at-lang']//section[*[@id eq 'at-lang-inline-type-title']]//p[@class eq 'inline-def'][@data-derivation eq 'union'][span[@class eq 'chip'][@data-derivation eq 'union'][. eq 'union']])
+          and exists($x:result//article[@id eq 'at-lang']//section[*[@id eq 'at-lang-inline-type-title']]//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#language']/bdi[. eq 'xs:language'])
+          and exists($x:result//article[@id eq 'at-lang']//section[*[@id eq 'at-lang-inline-type-title']]//div[@class eq 'inline-type inline-type--member']//tr[contains(@id, 'facet-enumeration')])" />
+    </x:scenario>
+
+    <x:scenario label="inline details preserve local constraints">
+      <x:expect
+        label="anonymous simple types, particle flags, occurrence a11y, and bdi wrappers render"
+        test="exists($x:result//article[@id eq 'ct-OrderType']//div[@class eq 'tree']//code[bdi eq 'inlineCode'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//div[@class eq 'tree']//div[@class eq 'tree__row'][code/bdi eq 'line']/span[@class eq 'tree__sep'][. eq ':'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//div[contains-token(@class, 'inline-facets')]//tr[contains(@id, 'facet-minLength')])
+          and exists($x:result//article[@id eq 'ct-OrderType']//table//div[@class eq 'inline-type inline-type--attribute']//tr[contains(@id, 'facet-pattern')])
+          and exists($x:result//article[@id eq 'ct-OrderType']//span[@class eq 'occurs'][@role eq 'img'][@aria-label])
+          and exists($x:result//article[@id eq 'ct-OrderType']//span[@data-particle-flag eq 'nillable'][. eq 'nillable'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//span[@data-particle-flag eq 'default']//code[. eq 'pending'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#string']/bdi[. eq 'xs:string'])
+          and exists($x:result//article[@id eq 'ct-OrderType']//h3[@class eq 'cmp__name']/bdi[. eq 'OrderType'])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="pattern facet semantics">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:simpleType name="Stepped">
+          <xs:restriction>
+            <xs:simpleType>
+              <xs:restriction base="xs:string">
+                <xs:pattern value="A|B" />
+                <xs:pattern value="C" />
+              </xs:restriction>
+            </xs:simpleType>
+            <xs:pattern value="D" />
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="pattern facets group by restriction step">
+      <x:expect
+        label="same-step patterns share one OR row and steps stay distinct"
+        test="count($x:result//section[*[@id eq 'st-Stepped-facets-title']]//tr[@data-restriction-step]) eq 2
+          and exists($x:result//section[*[@id eq 'st-Stepped-facets-title']]//tr[@data-restriction-step eq '2'][.//code[bdi eq 'A|B']][.//code[bdi eq 'C']][.//span[@class eq 'facet-or']])
+          and exists($x:result//section[*[@id eq 'st-Stepped-facets-title']]//tr[@data-restriction-step eq '1'][.//code[bdi eq 'D']])
+          and empty($x:result//section[*[@id eq 'st-Stepped-facets-title']]//tr[@data-restriction-step eq '1']//span[@class eq 'facet-or'])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="content type classification">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:complexType name="EmptyType" />
+        <xs:complexType name="SimpleContentType">
+          <xs:simpleContent>
+            <xs:extension base="xs:string">
+              <xs:attribute name="unit" type="xs:string" />
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+        <xs:complexType name="ElementOnlyType">
+          <xs:sequence>
+            <xs:element name="item" type="xs:string" />
+          </xs:sequence>
+        </xs:complexType>
+        <xs:complexType name="MixedType" mixed="true">
+          <xs:sequence>
+            <xs:element name="b" type="xs:string" />
+          </xs:sequence>
+        </xs:complexType>
+        <xs:complexType name="OpenType">
+          <xs:openContent mode="interleave">
+            <xs:any namespace="##other" processContents="lax" />
+          </xs:openContent>
+          <xs:sequence>
+            <xs:element name="x" type="xs:string" />
+          </xs:sequence>
+        </xs:complexType>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="each complex type declares its content type explicitly">
+      <x:expect
+        label="empty, simple, element-only, mixed, and open classifications render"
+        test="normalize-space($x:result//article[@id eq 'ct-ElementOnlyType']//p[@class eq 'content-type']) eq 'element-only content (child elements, no text)'
+          and exists($x:result//article[@id eq 'ct-EmptyType']//p[@class eq 'content-type'][@data-content-type eq 'empty'])
+          and exists($x:result//article[@id eq 'ct-SimpleContentType']//p[@class eq 'content-type'][@data-content-type eq 'simple'])
+          and exists($x:result//article[@id eq 'ct-ElementOnlyType']//p[@class eq 'content-type'][@data-content-type eq 'element-only'][@data-open eq 'false'])
+          and exists($x:result//article[@id eq 'ct-MixedType']//p[@class eq 'content-type'][@data-content-type eq 'mixed'])
+          and exists($x:result//article[@id eq 'ct-OpenType']//p[@class eq 'content-type'][@data-content-type eq 'element-only'][@data-open eq 'true'])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="composition edge annotations">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:import namespace="urn:other">
+          <xs:annotation>
+            <xs:documentation>Get access to the xml: attribute groups.</xs:documentation>
+          </xs:annotation>
+        </xs:import>
+        <xs:element name="Foo" type="xs:string" />
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="an import's annotation renders inside its schema row">
+      <x:expect
+        label="the edge row carries the documentation block"
+        test="exists($x:result//div[@id eq 'schema-edge-1']//div[@class eq 'doc__body'][contains(., 'Get access to the xml: attribute groups.')])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="group references and anonymous complex-type content models">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:group name="bodyGroup">
+          <xs:sequence>
+            <xs:element name="item" type="xs:string" />
+          </xs:sequence>
+        </xs:group>
+        <xs:complexType name="GroupOnlyType">
+          <xs:group ref="tns:bodyGroup" minOccurs="0" />
+        </xs:complexType>
+        <xs:complexType name="BaseType">
+          <xs:sequence>
+            <xs:element name="core" type="xs:string" />
+          </xs:sequence>
+        </xs:complexType>
+        <xs:complexType name="DerivedGroupType">
+          <xs:complexContent>
+            <xs:extension base="tns:BaseType">
+              <xs:group ref="tns:bodyGroup" />
+            </xs:extension>
+          </xs:complexContent>
+        </xs:complexType>
+        <xs:element name="Wrapper">
+          <xs:complexType>
+            <xs:complexContent>
+              <xs:extension base="tns:BaseType">
+                <xs:sequence>
+                  <xs:element name="extra" type="xs:string" />
+                </xs:sequence>
+                <xs:attribute name="note" type="xs:string" />
+              </xs:extension>
+            </xs:complexContent>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="Marker">
+          <xs:complexType>
+            <xs:attribute name="flag" type="xs:string" />
+          </xs:complexType>
+        </xs:element>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="a top-level group reference renders in the content-model tree">
+      <x:expect
+        label="the group-only type gets a tree whose root is the linked group reference"
+        test="exists($x:result//article[@id eq 'ct-GroupOnlyType']//div[@class eq 'tree']//span[@data-comp eq 'group'])
+          and exists($x:result//article[@id eq 'ct-GroupOnlyType']//div[@class eq 'tree']//a[@href eq '#gr-bodyGroup'])" />
+    </x:scenario>
+
+    <x:scenario label="a group reference inside complex-content derivation renders">
+      <x:expect
+        label="the derived type's tree carries the group reference from the extension body"
+        test="exists($x:result//article[@id eq 'ct-DerivedGroupType']//div[@class eq 'tree']//span[@data-comp eq 'group'])
+          and exists($x:result//article[@id eq 'ct-DerivedGroupType']//div[@class eq 'tree']//a[@href eq '#gr-bodyGroup'])" />
+    </x:scenario>
+
+    <x:scenario label="anonymous complex types expose derivation and derived content models">
+      <x:expect
+        label="the inline type block shows the extension base, content classification, particles, and a labelled attribute table"
+        test="exists($x:result//article[@id eq 'el-Wrapper']//section[*[@id eq 'el-Wrapper-inline-type-title']]//dt[. eq 'extension'])
+          and exists($x:result//article[@id eq 'el-Wrapper']//section[*[@id eq 'el-Wrapper-inline-type-title']]//dd/a[@href eq '#ct-BaseType'])
+          and exists($x:result//article[@id eq 'el-Wrapper']//section[*[@id eq 'el-Wrapper-inline-type-title']]//p[@class eq 'content-type'][@data-content-type eq 'element-only'])
+          and exists($x:result//article[@id eq 'el-Wrapper']//section[*[@id eq 'el-Wrapper-inline-type-title']]//div[@class eq 'tree']//code[bdi eq 'extra'])
+          and exists($x:result//article[@id eq 'el-Wrapper']//table/caption[. eq 'Attribute uses for anonymous complex type'])" />
+    </x:scenario>
+
+    <x:scenario label="anonymous complex types without particles emit no empty tree">
+      <x:expect
+        label="the attribute-only inline type is classified empty and carries no tree container"
+        test="exists($x:result//article[@id eq 'el-Marker']//section[*[@id eq 'el-Marker-inline-type-title']]//p[@class eq 'content-type'][@data-content-type eq 'empty'])
+          and empty($x:result//article[@id eq 'el-Marker']//div[@class eq 'tree'])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="identity constraint field lists">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:element name="Ledger">
+          <xs:key name="EntryKey">
+            <xs:selector xpath="entry" />
+            <xs:field xpath="@id" />
+            <xs:field xpath="@seq" />
+          </xs:key>
+        </xs:element>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="multi-field constraints render one list item per field">
+      <x:expect
+        label="the fields cell lists both field XPaths in source order"
+        test="let $lis := $x:result//article[@id eq 'el-Ledger']//tr[@id eq 'el-Ledger-k-EntryKey']/td[3]/ul[@class eq 'ic-fields']/li
+          return count($lis) eq 2
+            and $lis[1]/code[@dir eq 'ltr'] eq '@id'
+            and $lis[2]/code[@dir eq 'ltr'] eq '@seq'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="facet table details">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:simpleType name="Solo">
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="only" />
+          </xs:restriction>
+        </xs:simpleType>
+        <xs:simpleType name="Sized">
+          <xs:restriction base="xs:string">
+            <xs:whiteSpace value="collapse" fixed="true" />
+            <xs:minLength value="1" fixed="false" />
+            <xs:maxLength value="8" id="sized.max" />
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="a single enumeration value is described in the singular">
+      <x:expect
+        label="the enumeration-count flag uses the singular message form"
+        test="normalize-space($x:result//article[@id eq 'st-Solo']//span[@data-flag eq 'enumeration-count']) eq '1 enumeration value'" />
+    </x:scenario>
+
+    <x:scenario label="facet ID cells render only when the facet declares an id">
+      <x:expect
+        label="the maxLength row carries its id in a code wrapper and the minLength ID cell stays empty"
+        test="$x:result//article[@id eq 'st-Sized']//tr[contains(@id, 'facet-maxLength')]/td[3]/code/bdi eq 'sized.max'
+          and empty($x:result//article[@id eq 'st-Sized']//tr[contains(@id, 'facet-minLength')]/td[3]/node())" />
+    </x:scenario>
+
+    <x:scenario label="fixed facets render a flag and explicit non-true values stay raw">
+      <x:expect
+        label="whiteSpace carries a fixed flag, minLength keeps its raw false, maxLength stays empty"
+        test="exists($x:result//article[@id eq 'st-Sized']//tr[contains(@id, 'facet-whiteSpace')]/td[2]/span[@class eq 'flag'][@data-flag eq 'fixed'][. eq 'fixed'])
+          and normalize-space($x:result//article[@id eq 'st-Sized']//tr[contains(@id, 'facet-minLength')]/td[2]) eq 'false'
+          and empty($x:result//article[@id eq 'st-Sized']//tr[contains(@id, 'facet-maxLength')]/td[2]/node())" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="attribute table columns">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:complexType name="Holder">
+          <xs:attribute name="pending" use="prohibited" />
+        </xs:complexType>
+        <xs:complexType name="Plain">
+          <xs:attribute name="p1" type="xs:string" />
+          <xs:anyAttribute namespace="##other" />
+        </xs:complexType>
+        <xs:complexType name="Rich">
+          <xs:attribute name="r1" type="xs:string" inheritable="true" />
+          <xs:attribute name="r2" type="xs:string">
+            <xs:annotation>
+              <xs:documentation>Documented attribute.</xs:documentation>
+            </xs:annotation>
+          </xs:attribute>
+        </xs:complexType>
+        <xs:complexType name="ViaGroup">
+          <xs:attributeGroup ref="tns:Extra" />
+        </xs:complexType>
+        <xs:attributeGroup name="Extra">
+          <xs:attributeGroup ref="tns:Inner" />
+        </xs:attributeGroup>
+        <xs:attributeGroup name="Inner">
+          <xs:attribute name="deep" type="xs:string" inheritable="true">
+            <xs:annotation>
+              <xs:documentation>Deep documented attribute.</xs:documentation>
+            </xs:annotation>
+          </xs:attribute>
+        </xs:attributeGroup>
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="attributes with no declared type show an explicit marker">
+      <x:expect
+        label="the type cell carries a muted no-declared-type marker, not an inline-type claim"
+        test="let $cell := $x:result//article[@id eq 'ct-Holder']//table//td/span[contains-token(@class, 'attr-no-type')]
+          return normalize-space($cell) eq 'no declared type'
+            and contains-token($cell/@class, 'muted')
+            and not(contains(string($x:result//article[@id eq 'ct-Holder']), 'inline simple type'))" />
+    </x:scenario>
+
+    <x:scenario label="inheritable and documentation columns render only when populated">
+      <x:expect
+        label="a table with neither fact has four columns; a table with both has six"
+        test="let $plain := $x:result//article[@id eq 'ct-Plain']//table,
+            $rich := $x:result//article[@id eq 'ct-Rich']//table
+          return count($plain/thead//th) eq 4
+            and empty($plain/thead//th[. eq 'Inheritable'])
+            and empty($plain/thead//th[. eq 'Documentation'])
+            and $plain/tbody/tr[normalize-space(th) eq 'anyAttribute']/td[2]/@colspan eq '2'
+            and count($rich/thead//th) eq 6
+            and exists($rich/thead//th[. eq 'Inheritable'])
+            and exists($rich/thead//th[. eq 'Documentation'])" />
+    </x:scenario>
+
+    <x:scenario label="group-introduced attributes drive the column decision">
+      <x:expect
+        label="columns and group-row colspans reflect attributes introduced through nested groups"
+        test="let $t := $x:result//article[@id eq 'ct-ViaGroup']//table
+          return count($t/thead//th) eq 6
+            and exists($t/thead//th[. eq 'Inheritable'])
+            and exists($t/thead//th[. eq 'Documentation'])
+            and $t/tbody/tr[1]/td[2]/@colspan eq '4'
+            and $t/tbody/tr[2]/td[2]/@colspan eq '4'
+            and exists($t/tbody/tr[th//bdi = 'deep']/td[normalize-space(.) eq 'yes'])" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="component ordering">
+    <x:context>
+      <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+        <xs:element name="Zebra" type="xs:string" />
+        <xs:element name="alpha" type="xs:string" />
+        <xs:element name="Mango" type="xs:string" />
+        <xs:attribute name="zAttr" type="xs:string" />
+        <xs:attribute name="aAttr" type="xs:string" />
+        <xs:group name="zGroup">
+          <xs:sequence />
+        </xs:group>
+        <xs:group name="aGroup">
+          <xs:sequence />
+        </xs:group>
+        <xs:attributeGroup name="zAttrs" />
+        <xs:attributeGroup name="aAttrs" />
+        <xs:notation name="zNote" public="urn:z" />
+        <xs:notation name="aNote" public="urn:a" />
+      </xs:schema>
+    </x:context>
+
+    <x:scenario label="components are ordered alphabetically within each kind">
+      <x:expect
+        label="element, attribute, group, attribute group, and notation nav entries and articles sort by name, not source position"
+        test="$x:result//div[@class eq 'nav-group'][@data-kind eq 'element']//a[@href eq '#el-alpha']
+            &lt;&lt; $x:result//div[@class eq 'nav-group'][@data-kind eq 'element']//a[@href eq '#el-Mango']
+          and $x:result//div[@class eq 'nav-group'][@data-kind eq 'element']//a[@href eq '#el-Mango']
+            &lt;&lt; $x:result//div[@class eq 'nav-group'][@data-kind eq 'element']//a[@href eq '#el-Zebra']
+          and $x:result//article[@id eq 'el-alpha'] &lt;&lt; $x:result//article[@id eq 'el-Mango']
+          and $x:result//article[@id eq 'el-Mango'] &lt;&lt; $x:result//article[@id eq 'el-Zebra']
+          and $x:result//div[@class eq 'nav-group'][@data-kind eq 'attribute']//a[@href eq '#at-aAttr']
+            &lt;&lt; $x:result//div[@class eq 'nav-group'][@data-kind eq 'attribute']//a[@href eq '#at-zAttr']
+          and $x:result//article[@id eq 'gr-aGroup'] &lt;&lt; $x:result//article[@id eq 'gr-zGroup']
+          and $x:result//article[@id eq 'ag-aAttrs'] &lt;&lt; $x:result//article[@id eq 'ag-zAttrs']
+          and $x:result//article[@id eq 'no-aNote'] &lt;&lt; $x:result//article[@id eq 'no-zNote']" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

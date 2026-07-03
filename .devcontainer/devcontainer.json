@@ -1,0 +1,40 @@
+{
+  // Dev environment for xsdstyle — a single XSLT 3.0 stylesheet rendered with
+  // Saxon. Reproduces the CI toolchain so `make test`, `make lint`,
+  // `make render`, `make smoke-test`, and `make lint-a11y` all run locally.
+  "name": "xsdstyle",
+  "build": { "dockerfile": "Dockerfile" },
+
+  // Node 24 matches actions/setup-node in ci.yml; needed for Prettier
+  // (lint/format) and @axe-core/cli (lint-a11y). Java 21 comes from the image.
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" },
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+
+  // Pre-warm everything the Makefile would otherwise download on first use:
+  // Saxon-HE + xmlresolver and XSpec into .tools/, vnu.jar, and the pinned
+  // global npm tools (Prettier + its XML plugin, @axe-core/cli). After this the
+  // full test/lint/render/smoke/a11y loop runs offline. .tools/ is gitignored
+  // and lives in the workspace mount, so it survives container rebuilds.
+  "postCreateCommand": "make install-saxon install-xspec install-vnu install-prettier install-axe",
+
+  // Chromium in a container can deadlock on the default 64 MB /dev/shm during
+  // the a11y audit; a larger shared-memory segment keeps headless Chrome stable.
+  "runArgs": ["--shm-size=1g"],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "deltaxml.xslt-xpath", // XSLT 3.0 + XPath language support for xsdstyle.xsl
+        "redhat.vscode-xml" // XML / XSD / XSpec editing + validation
+      ],
+      "settings": {
+        // The repo is byte-determinism-sensitive and Prettier enforces LF.
+        "files.eol": "\n"
+      }
+    }
+  },
+
+  "remoteUser": "vscode"
+}

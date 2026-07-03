@@ -1,4 +1,4 @@
-.PHONY: lint lint-xml lint-format lint-a11y format install-prettier install-xspec install-saxon install-vnu install-axe install-sample-schemas test test-clean render smoke-test smoke-test-clean
+.PHONY: lint lint-xml lint-format lint-a11y format install-prettier install-xspec install-saxon install-vnu install-axe install-sample-schemas test test-coverage coverage test-clean render smoke-test smoke-test-clean
 
 PRETTIER_VERSION := 3.3.3
 PRETTIER_XML_VERSION := 3.4.1
@@ -104,7 +104,22 @@ test: install-xspec install-saxon
 	fi
 	@set -e; for t in $(XSPEC_TESTS); do echo "==> $$t"; "$(XSPEC)" "$$t"; done
 
-# Drop the per-run xspec artefacts (compiled stylesheets, HTML reports).
+# Run every test/*.xspec and emit XSpec's XSLT coverage reports. Reports are
+# written next to the normal XSpec reports as test/xspec/*-coverage.{xml,html}.
+test-coverage: install-xspec install-saxon
+	@if [ -z "$(XSPEC_TESTS)" ]; then echo "no xspec tests found in test/"; exit 1; fi
+	@if [ -z "$$SAXON_CP" ]; then \
+		echo "ERROR: SAXON_CP could not be resolved."; \
+		echo "  Try: brew install saxon  (or)  make install-saxon"; \
+		exit 1; \
+	fi
+	@set -e; for t in $(XSPEC_TESTS); do echo "==> $$t"; "$(XSPEC)" -c "$$t"; done
+
+# Short alias for local coverage checks.
+coverage: test-coverage
+
+# Drop the per-run xspec artefacts (compiled stylesheets, HTML reports,
+# coverage XML/HTML reports).
 test-clean:
 	rm -rf test/xspec
 

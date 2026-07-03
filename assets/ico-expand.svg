@@ -1,0 +1,11 @@
+<!-- Copied verbatim into the page by f:icon(): no whitespace inside the root element. -->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="ico-expand"
+  viewBox="0 0 16 16"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.6"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"><path d="M5.5 6 8 3.5 10.5 6M5.5 10 8 12.5 10.5 10" /></svg>

@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  stylesheet="../xsdstyle.xsl"
+  run-as="external">
+  <x:scenario label="component relationships">
+    <x:scenario label="type hierarchy and type-use backlinks render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Thing" type="tns:DerivedType" />
+          <xs:complexType name="PayloadExceptionAlert">
+            <xs:sequence>
+              <xs:element name="payloadException" type="tns:DerivedType" />
+            </xs:sequence>
+          </xs:complexType>
+          <xs:complexType name="BaseType">
+            <xs:sequence />
+          </xs:complexType>
+          <xs:complexType name="DerivedType">
+            <xs:complexContent>
+              <xs:extension base="tns:BaseType" />
+            </xs:complexContent>
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="derived type has a used-by backlink and hierarchy"
+        test="exists($x:result//article[@id eq 'ct-DerivedType']//section[*[@id eq 'ct-DerivedType-see-also-title']]//a[@href eq '#el-Thing'])
+          and exists($x:result//article[@id eq 'ct-DerivedType']//section[*[@id eq 'ct-DerivedType-see-also-title']]//li[a[@href eq '#ct-PayloadExceptionAlert'] and span[@class eq 'muted'][contains(normalize-space(.), 'as element payloadException') and code eq 'payloadException']])
+          and exists($x:result//article[@id eq 'ct-DerivedType']//section[*[@id eq 'ct-DerivedType-hierarchy-title']]//a[@href eq '#ct-BaseType'])" />
+    </x:scenario>
+
+    <x:scenario label="identity keyrefs link back to their key">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Order">
+            <xs:key name="ItemKey">
+              <xs:selector xpath="item" />
+              <xs:field xpath="@id" />
+            </xs:key>
+            <xs:keyref name="ItemRef" refer="tns:ItemKey">
+              <xs:selector xpath="ref" />
+              <xs:field xpath="@idref" />
+            </xs:keyref>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="keyref refer cell links to key row and see-also lists the keyref"
+        test="exists($x:result//article[@id eq 'el-Order']//a[@href eq '#el-Order-k-ItemKey'][. eq 'tns:ItemKey'])
+          and exists($x:result//article[@id eq 'el-Order']//section[*[@id eq 'el-Order-see-also-title']]//a[@href eq '#el-Order-kr-ItemRef'])" />
+      <x:expect
+        label="key and keyref row headers carry kind chips"
+        test="exists($x:result//article[@id eq 'el-Order']//tr[@id eq 'el-Order-k-ItemKey']/th/span[@class eq 'chip'][@data-ic-kind eq 'key'][. eq 'key'])
+          and exists($x:result//article[@id eq 'el-Order']//tr[@id eq 'el-Order-kr-ItemRef']/th/span[@class eq 'chip'][@data-ic-kind eq 'keyref'][. eq 'keyref'])" />
+    </x:scenario>
+
+    <x:scenario label="reverse reference backlinks render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Shared" type="xs:string" />
+          <xs:group name="SharedGroup">
+            <xs:sequence>
+              <xs:element name="FromGroup" type="xs:string" />
+            </xs:sequence>
+          </xs:group>
+          <xs:attributeGroup name="SharedAttributes">
+            <xs:attribute name="code" type="xs:string" />
+          </xs:attributeGroup>
+          <xs:complexType name="Holder">
+            <xs:sequence>
+              <xs:element ref="tns:Shared" />
+              <xs:group ref="tns:SharedGroup" />
+            </xs:sequence>
+            <xs:attributeGroup ref="tns:SharedAttributes" />
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="global components list owners that reference them"
+        test="exists($x:result//article[@id eq 'el-Shared']//section[*[@id eq 'el-Shared-see-also-title']]//h5[. eq 'Referenced as an element by'])
+          and exists($x:result//article[@id eq 'el-Shared']//section[*[@id eq 'el-Shared-see-also-title']]//a[@href eq '#ct-Holder'])
+          and exists($x:result//article[@id eq 'gr-SharedGroup']//section[*[@id eq 'gr-SharedGroup-see-also-title']]//h5[. eq 'Referenced as a model group by'])
+          and exists($x:result//article[@id eq 'gr-SharedGroup']//section[*[@id eq 'gr-SharedGroup-see-also-title']]//a[@href eq '#ct-Holder'])
+          and exists($x:result//article[@id eq 'ag-SharedAttributes']//section[*[@id eq 'ag-SharedAttributes-see-also-title']]//h5[. eq 'Referenced as an attribute group by'])
+          and exists($x:result//article[@id eq 'ag-SharedAttributes']//section[*[@id eq 'ag-SharedAttributes-see-also-title']]//a[@href eq '#ct-Holder'])" />
+    </x:scenario>
+
+    <x:scenario label="substitution group and attribute references are linked">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Head" type="xs:string" />
+          <xs:element name="Member" substitutionGroup="tns:Head" type="xs:string" />
+          <xs:attribute name="sharedCode" type="xs:string" />
+          <xs:group name="RepeatedGroup">
+            <xs:sequence>
+              <xs:element name="GroupedValue" type="xs:string" />
+            </xs:sequence>
+          </xs:group>
+          <xs:complexType name="ReferenceHolder">
+            <xs:sequence>
+              <xs:group ref="tns:RepeatedGroup" minOccurs="0" maxOccurs="unbounded" />
+            </xs:sequence>
+            <xs:attribute ref="tns:sharedCode" />
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="substitution members, attribute ref rows, and group occurrence markers render"
+        test="exists($x:result//article[@id eq 'el-Head']//section[*[@id eq 'el-Head-see-also-title']]//h5[. eq 'Substitution group members'])
+          and exists($x:result//article[@id eq 'el-Head']//section[*[@id eq 'el-Head-see-also-title']]//a[@href eq '#el-Member'][. eq 'Member'])
+          and exists($x:result//article[@id eq 'ct-ReferenceHolder']//table//a[@href eq '#at-sharedCode'][. eq 'tns:sharedCode'])
+          and exists($x:result//article[@id eq 'ct-ReferenceHolder']//div[@class eq 'tree']//a[@href eq '#gr-RepeatedGroup'][. eq 'tns:RepeatedGroup'])
+          and exists($x:result//article[@id eq 'ct-ReferenceHolder']//div[@class eq 'tree']//span[@class eq 'occurs'][. eq '*'])" />
+      <x:expect
+        label="global attributes list the components that reference them"
+        test="exists($x:result//article[@id eq 'at-sharedCode']//section[*[@id eq 'at-sharedCode-see-also-title']]//h5[. eq 'Referenced as an attribute by'])
+          and exists($x:result//article[@id eq 'at-sharedCode']//section[*[@id eq 'at-sharedCode-see-also-title']]//a[@href eq '#ct-ReferenceHolder'])" />
+    </x:scenario>
+
+    <x:scenario label="attribute groups expand into attribute tables">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:attributeGroup name="Inner">
+            <xs:attribute name="b" type="xs:string" />
+          </xs:attributeGroup>
+          <xs:attributeGroup name="Outer">
+            <xs:attribute name="a" type="xs:string" />
+            <xs:attributeGroup ref="tns:Inner" />
+          </xs:attributeGroup>
+          <xs:complexType name="Holder">
+            <xs:sequence />
+            <xs:attributeGroup ref="tns:Outer" />
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="attributes from directly and transitively referenced groups appear with their introducing group"
+        test="exists($x:result//article[@id eq 'ct-Holder']//table//tr[@data-via eq '{urn:example}Outer'][th//code[bdi eq 'a']][th//span[contains-token(@class, 'attr-via')]/a[@href eq '#ag-Outer']])
+          and exists($x:result//article[@id eq 'ct-Holder']//table//tr[@data-via eq '{urn:example}Inner'][th//code[bdi eq 'b']][th//span[contains-token(@class, 'attr-via')]/a[@href eq '#ag-Inner']])
+          and exists($x:result//article[@id eq 'ag-Outer']//table//tr[@data-via eq '{urn:example}Inner'][th//code[bdi eq 'b']])" />
+    </x:scenario>
+
+    <x:scenario label="cyclic attribute-group references stop with a note">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:attributeGroup name="A">
+            <xs:attribute name="fromA" type="xs:string" />
+            <xs:attributeGroup ref="tns:B" />
+          </xs:attributeGroup>
+          <xs:attributeGroup name="B">
+            <xs:attributeGroup ref="tns:A" />
+          </xs:attributeGroup>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="expansion stops at the cycle, keeps the reference visible, and renders without non-termination"
+        test="exists($x:result//article[@id eq 'ag-A']//table//td[@data-code eq 'recursive-expansion-stopped'])
+          and exists($x:result//article[@id eq 'ag-A']//table//a[@href eq '#ag-B'])
+          and exists($x:result//article[@id eq 'ag-A']//table//a[@href eq '#ag-A'])
+          and exists($x:result//article[@id eq 'ag-B']//table//td[@data-code eq 'recursive-expansion-stopped'])" />
+    </x:scenario>
+
+    <x:scenario label="identity constraint references link to their target">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Defs">
+            <xs:key name="MainKey">
+              <xs:annotation>
+                <xs:documentation>Primary key for items.</xs:documentation>
+              </xs:annotation>
+              <xs:selector xpath="item" />
+              <xs:field xpath="@id" />
+            </xs:key>
+          </xs:element>
+          <xs:element name="User">
+            <xs:key ref="tns:MainKey" />
+          </xs:element>
+          <xs:element name="Dangling">
+            <xs:unique ref="tns:Nothing" />
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="resolved @ref links to the referenced constraint, unresolved @ref stays visible, and constraint annotations render"
+        test="exists($x:result//article[@id eq 'el-User']//table//a[@class eq 'xref xref--int'][@href eq '#el-Defs-k-MainKey'][. eq 'tns:MainKey'])
+          and exists($x:result//article[@id eq 'el-Dangling']//table//span[@class eq 'xref xref--unresolved'][. eq 'tns:Nothing'])
+          and exists($x:result//article[@id eq 'el-Defs']//table//div[@class eq 'doc is-clampable'][contains(., 'Primary key for items.')])" />
+      <x:expect
+        label="unique constraints carry their kind chip"
+        test="exists($x:result//article[@id eq 'el-Dangling']//table//th/span[@class eq 'chip'][@data-ic-kind eq 'unique'][. eq 'unique'])" />
+    </x:scenario>
+
+    <x:scenario label="substitution head chains render transitively">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="GrandHead" type="xs:string" />
+          <xs:element name="Head" substitutionGroup="tns:GrandHead" type="xs:string" />
+          <xs:element name="Member" substitutionGroup="tns:Head" type="xs:string" />
+          <xs:element name="Orphan" substitutionGroup="MissingHead" type="xs:string" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="member lists its transitive head chain in order and unresolved heads stay visible"
+        test="(let $lis := $x:result//article[@id eq 'el-Member']//ul[@aria-labelledby eq 'el-Member-seealso-heads']/li
+            return count($lis) eq 2
+              and $lis[1]//a[@class eq 'xref xref--int']/@href eq '#el-Head'
+              and $lis[2]//a[@class eq 'xref xref--int']/@href eq '#el-GrandHead')
+          and exists($x:result//article[@id eq 'el-Orphan']//ul[@aria-labelledby eq 'el-Orphan-seealso-heads']/li//span[@class eq 'xref xref--unresolved'][bdi eq 'MissingHead'])" />
+    </x:scenario>
+
+    <x:scenario label="cyclic substitution groups terminate">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="A" substitutionGroup="tns:B" type="xs:string" />
+          <xs:element name="B" substitutionGroup="tns:A" type="xs:string" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="the head chain stops when it reaches the starting element again"
+        test="(let $lis := $x:result//article[@id eq 'el-A']//ul[@aria-labelledby eq 'el-A-seealso-heads']/li
+            return count($lis) eq 1 and $lis[1]//a[@class eq 'xref xref--int']/@href eq '#el-B')" />
+    </x:scenario>
+
+    <x:scenario label="redefined components link back to the original definition">
+      <x:context href="fixtures/redefine-primary.xsd" />
+      <x:expect
+        label="the extension base inside xs:redefine resolves to the original, not the redefinition itself"
+        test="exists($x:result//article[@id eq 'ct-BaseThing-redefined'])
+          and exists($x:result//article[@id eq 'ct-BaseThing'])
+          and $x:result//article[@id eq 'ct-BaseThing-redefined']//a[@class eq 'xref xref--int'][bdi eq 'tns:BaseThing']/@href eq '#ct-BaseThing'" />
+    </x:scenario>
+
+    <x:scenario label="unresolved keyrefs remain visible">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="BrokenKeys">
+            <xs:keyref name="MissingRef" refer="tns:MissingKey">
+              <xs:selector xpath="item" />
+              <xs:field xpath="@ref" />
+            </xs:keyref>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="unresolved keyref refer value is marked as unresolved, bidi-isolated, and focusable"
+        test="exists($x:result//article[@id eq 'el-BrokenKeys']//span[@class eq 'xref xref--unresolved'][bdi eq 'tns:MissingKey'][@tabindex eq '0'][@title])" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

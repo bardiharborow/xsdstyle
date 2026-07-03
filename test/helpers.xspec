@@ -1,0 +1,553 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Unit tests for the pure (non-schema-aware) helper functions in xsdstyle.xsl.
+
+  The stylesheet helper namespace urn:xsdoc:functions is bound to f: here (the
+  same prefix the stylesheet itself uses); x: is reserved by XSpec. Schema-aware
+  helpers that need the $schemas record set (f:anchor, f:qname, f:reference-qname)
+  are exercised by the integration suites (references.xspec, relationships.xspec)
+  rather than called bare here.
+
+  Run via `make test` or `make test XSPEC_TESTS=test/helpers.xspec`.
+-->
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:f="urn:xsdoc:functions"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+  stylesheet="../xsdstyle.xsl">
+  <x:scenario label="f:clark — QName to Clark form">
+    <x:scenario label="qualified QName renders Clark notation">
+      <x:call function="f:clark">
+        <x:param select="QName('urn:example', 'foo')" />
+      </x:call>
+      <x:expect label="namespace in braces then local name" select="'{urn:example}foo'" />
+    </x:scenario>
+    <x:scenario label="no-namespace QName renders empty braces">
+      <x:call function="f:clark">
+        <x:param select="QName('', 'bare')" />
+      </x:call>
+      <x:expect label="empty namespace still emits braces" select="'{}bare'" />
+    </x:scenario>
+    <x:scenario label="empty input returns empty string">
+      <x:call function="f:clark">
+        <x:param select="()" />
+      </x:call>
+      <x:expect label="empty string" select="''" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:occurs — occurrence marker">
+    <x:scenario label="default 1..1 produces no marker">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element />
+        </x:param>
+      </x:call>
+      <x:expect label="empty" select="''" />
+    </x:scenario>
+    <x:scenario label="0..1 produces ?">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element minOccurs="0" maxOccurs="1" />
+        </x:param>
+      </x:call>
+      <x:expect label="question mark" select="'?'" />
+    </x:scenario>
+    <x:scenario label="0..unbounded produces *">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element minOccurs="0" maxOccurs="unbounded" />
+        </x:param>
+      </x:call>
+      <x:expect label="star" select="'*'" />
+    </x:scenario>
+    <x:scenario label="1..unbounded produces +">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element minOccurs="1" maxOccurs="unbounded" />
+        </x:param>
+      </x:call>
+      <x:expect label="plus" select="'+'" />
+    </x:scenario>
+    <x:scenario label="bounded range produces [min..max]">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element minOccurs="2" maxOccurs="5" />
+        </x:param>
+      </x:call>
+      <x:expect label="bracketed range" select="'[2..5]'" />
+    </x:scenario>
+    <x:scenario label="exact N..N produces [N..N]">
+      <x:call function="f:occurs">
+        <x:param>
+          <xs:element minOccurs="3" maxOccurs="3" />
+        </x:param>
+      </x:call>
+      <x:expect label="bracketed equal range" select="'[3..3]'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:occurs-title — human-readable tooltip">
+    <x:scenario label="default 1..1 produces no title">
+      <x:call function="f:occurs-title">
+        <x:param>
+          <xs:element />
+        </x:param>
+      </x:call>
+      <x:expect label="empty" select="''" />
+    </x:scenario>
+    <x:scenario label="0..1 produces an Optional title">
+      <x:call function="f:occurs-title">
+        <x:param>
+          <xs:element minOccurs="0" maxOccurs="1" />
+        </x:param>
+      </x:call>
+      <x:expect label="optional" select="'Optional: 0 or 1 occurrence (minOccurs=0, maxOccurs=1)'" />
+    </x:scenario>
+    <x:scenario label="0..unbounded produces zero-or-more">
+      <x:call function="f:occurs-title">
+        <x:param>
+          <xs:element minOccurs="0" maxOccurs="unbounded" />
+        </x:param>
+      </x:call>
+      <x:expect label="zero or more" select="'Zero or more occurrences (minOccurs=0, maxOccurs=unbounded)'" />
+    </x:scenario>
+    <x:scenario label="1..unbounded produces one-or-more">
+      <x:call function="f:occurs-title">
+        <x:param>
+          <xs:element minOccurs="1" maxOccurs="unbounded" />
+        </x:param>
+      </x:call>
+      <x:expect label="one or more" select="'One or more occurrences (minOccurs=1, maxOccurs=unbounded)'" />
+    </x:scenario>
+    <x:scenario label="exact N..N produces Exactly N">
+      <x:call function="f:occurs-title">
+        <x:param>
+          <xs:element minOccurs="3" maxOccurs="3" />
+        </x:param>
+      </x:call>
+      <x:expect label="exactly 3" select="'Exactly 3 occurrences (minOccurs=3, maxOccurs=3)'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:xsd-true — XSD boolean literal">
+    <x:scenario label="'true' is true">
+      <x:call function="f:xsd-true">
+        <x:param select="'true'" />
+      </x:call>
+      <x:expect label="true" select="true()" />
+    </x:scenario>
+    <x:scenario label="'1' is true">
+      <x:call function="f:xsd-true">
+        <x:param select="'1'" />
+      </x:call>
+      <x:expect label="true" select="true()" />
+    </x:scenario>
+    <x:scenario label="'false' is false">
+      <x:call function="f:xsd-true">
+        <x:param select="'false'" />
+      </x:call>
+      <x:expect label="false" select="false()" />
+    </x:scenario>
+    <x:scenario label="empty is false">
+      <x:call function="f:xsd-true">
+        <x:param select="()" />
+      </x:call>
+      <x:expect label="false" select="false()" />
+    </x:scenario>
+    <x:scenario label="a non-boolean literal is false">
+      <x:call function="f:xsd-true">
+        <x:param select="'yes'" />
+      </x:call>
+      <x:expect label="false" select="false()" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:kind-abbrev — anchor abbreviations">
+    <x:scenario label="element to el">
+      <x:call function="f:kind-abbrev">
+        <x:param select="'element'" />
+      </x:call>
+      <x:expect label="el" select="'el'" />
+    </x:scenario>
+    <x:scenario label="complexType to ct">
+      <x:call function="f:kind-abbrev">
+        <x:param select="'complexType'" />
+      </x:call>
+      <x:expect label="ct" select="'ct'" />
+    </x:scenario>
+    <x:scenario label="attributeGroup to ag">
+      <x:call function="f:kind-abbrev">
+        <x:param select="'attributeGroup'" />
+      </x:call>
+      <x:expect label="ag" select="'ag'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:is-builtin-type — XSD datatype recognition">
+    <x:scenario label="xs:string is a built-in">
+      <x:call function="f:is-builtin-type">
+        <x:param select="QName('http://www.w3.org/2001/XMLSchema', 'string')" />
+      </x:call>
+      <x:expect label="true" select="true()" />
+    </x:scenario>
+    <x:scenario label="xs:dateTimeStamp (XSD 1.1) is a built-in">
+      <x:call function="f:is-builtin-type">
+        <x:param select="QName('http://www.w3.org/2001/XMLSchema', 'dateTimeStamp')" />
+      </x:call>
+      <x:expect label="true" select="true()" />
+    </x:scenario>
+    <x:scenario label="a user-namespace QName is not a built-in">
+      <x:call function="f:is-builtin-type">
+        <x:param select="QName('urn:example', 'string')" />
+      </x:call>
+      <x:expect label="false" select="false()" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:safe-href — URL scheme filtering">
+    <x:scenario label="https passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'https://example.org/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'https://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="javascript: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'javascript:alert(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="case and whitespace bypass is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'  JavaScript:alert(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="data: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'data:text/html,x'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="vbscript: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'vbscript:msgbox(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="file: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'file:///etc/passwd'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="a relative path passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'../other/schema.xsd'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'../other/schema.xsd'" />
+    </x:scenario>
+    <x:scenario label="a same-document fragment passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'#el-ns1-Foo'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'#el-ns1-Foo'" />
+    </x:scenario>
+    <x:scenario label="http passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'http://example.org/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'http://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="mailto passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'mailto:a@example.org'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'mailto:a@example.org'" />
+    </x:scenario>
+    <x:scenario label="tel passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'tel:+15551234'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'tel:+15551234'" />
+    </x:scenario>
+    <x:scenario label="ftp passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'ftp://example.org/pub/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'ftp://example.org/pub/x'" />
+    </x:scenario>
+    <x:scenario label="ftps passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'ftps://example.org/pub/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'ftps://example.org/pub/x'" />
+    </x:scenario>
+    <x:scenario label="blob: is rejected (allowlist, not denylist)">
+      <x:call function="f:safe-href">
+        <x:param select="'blob:https://example.org/uuid'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="an unknown app scheme is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'intent://scan/#Intent;scheme=x;end'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="ASCII whitespace is stripped from an allowed URL">
+      <x:call function="f:safe-href">
+        <x:param select="'https://example.org/ x'" />
+      </x:call>
+      <x:expect label="stripped, returned" select="'https://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="empty input yields empty">
+      <x:call function="f:safe-href">
+        <x:param select="''" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:relativize — host-independent display paths">
+    <x:scenario label="a document at the base strips to its filename">
+      <x:call function="f:relativize">
+        <x:param select="'file:///home/u/proj/schema.xsd'" />
+        <x:param select="'file:///home/u/proj/'" />
+      </x:call>
+      <x:expect label="bare filename" select="'schema.xsd'" />
+    </x:scenario>
+    <x:scenario label="a nested document keeps its sub-path">
+      <x:call function="f:relativize">
+        <x:param select="'file:///home/u/proj/sub/inc.xsd'" />
+        <x:param select="'file:///home/u/proj/'" />
+      </x:call>
+      <x:expect label="sub path" select="'sub/inc.xsd'" />
+    </x:scenario>
+    <x:scenario label="a sibling directory yields a ../ path">
+      <x:call function="f:relativize">
+        <x:param select="'file:///home/u/other/inc.xsd'" />
+        <x:param select="'file:///home/u/proj/'" />
+      </x:call>
+      <x:expect label="relative sibling" select="'../other/inc.xsd'" />
+    </x:scenario>
+    <x:scenario label="a different origin is returned verbatim">
+      <x:call function="f:relativize">
+        <x:param select="'https://example.org/x.xsd'" />
+        <x:param select="'file:///home/u/proj/'" />
+      </x:call>
+      <x:expect label="verbatim" select="'https://example.org/x.xsd'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:has-xsd11 — XSD 1.1 feature detection">
+    <x:scenario label="a vc:* attribute is an XSD 1.1 signal">
+      <x:call function="f:has-xsd11">
+        <x:param>
+          <xs:element vc:minVersion="1.1" />
+        </x:param>
+      </x:call>
+      <x:expect label="true" select="true()" />
+    </x:scenario>
+    <x:scenario label="a plain element is not an XSD 1.1 signal">
+      <x:call function="f:has-xsd11">
+        <x:param>
+          <xs:element name="Plain" />
+        </x:param>
+      </x:call>
+      <x:expect label="false" select="false()" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:wildcard-provenance — wildcard origin">
+    <x:scenario label="wildcard in default open content">
+      <x:call function="f:wildcard-provenance">
+        <x:param select="//xs:any">
+          <xs:schema>
+            <xs:defaultOpenContent>
+              <xs:any namespace="##other" />
+            </xs:defaultOpenContent>
+          </xs:schema>
+        </x:param>
+      </x:call>
+      <x:expect label="default-open-content" select="'default-open-content'" />
+    </x:scenario>
+    <x:scenario label="wildcard in explicit open content">
+      <x:call function="f:wildcard-provenance">
+        <x:param select="//xs:any">
+          <xs:complexType name="T">
+            <xs:openContent mode="interleave">
+              <xs:any namespace="##any" />
+            </xs:openContent>
+          </xs:complexType>
+        </x:param>
+      </x:call>
+      <x:expect label="open-content" select="'open-content'" />
+    </x:scenario>
+    <x:scenario label="wildcard in a named attribute group">
+      <x:call function="f:wildcard-provenance">
+        <x:param select="//xs:anyAttribute">
+          <xs:attributeGroup name="G">
+            <xs:anyAttribute namespace="##other" />
+          </xs:attributeGroup>
+        </x:param>
+      </x:call>
+      <x:expect label="attribute-group" select="'attribute-group'" />
+    </x:scenario>
+    <x:scenario label="wildcard in direct content">
+      <x:call function="f:wildcard-provenance">
+        <x:param select="//xs:any">
+          <xs:complexType name="T">
+            <xs:sequence>
+              <xs:any namespace="##any" />
+            </xs:sequence>
+          </xs:complexType>
+        </x:param>
+      </x:call>
+      <x:expect label="direct" select="'direct'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:fundamental-facets — built-in fundamental facet catalog">
+    <x:scenario label="a bounded numeric builtin carries the full facet set">
+      <x:call function="f:fundamental-facets">
+        <x:param select="'int'" />
+      </x:call>
+      <x:expect
+        label="int is totally ordered, bounded, finite, numeric"
+        test="$x:result?ordered eq 'total' and $x:result?bounded eq 'true'
+          and $x:result?cardinality eq 'finite' and $x:result?numeric eq 'true'" />
+    </x:scenario>
+    <x:scenario label="an unordered unbounded builtin reports spec vocabulary values">
+      <x:call function="f:fundamental-facets">
+        <x:param select="'string'" />
+      </x:call>
+      <x:expect
+        label="string is unordered, unbounded, countably infinite, non-numeric"
+        test="$x:result?ordered eq 'false' and $x:result?bounded eq 'false'
+          and $x:result?cardinality eq 'countably infinite' and $x:result?numeric eq 'false'" />
+    </x:scenario>
+    <x:scenario label="a partially ordered builtin distinguishes partial from total">
+      <x:call function="f:fundamental-facets">
+        <x:param select="'dateTime'" />
+      </x:call>
+      <x:expect label="dateTime is partially ordered" test="$x:result?ordered eq 'partial'" />
+    </x:scenario>
+    <x:scenario label="an unknown name returns empty">
+      <x:call function="f:fundamental-facets">
+        <x:param select="'noSuchType'" />
+      </x:call>
+      <x:expect label="empty sequence" test="empty($x:result)" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:t — message catalog lookup">
+    <x:scenario label="a known key returns its English value">
+      <x:call function="f:t">
+        <x:param select="'diag.heading'" />
+      </x:call>
+      <x:expect label="English value" select="'Diagnostics'" />
+    </x:scenario>
+    <x:scenario label="a missing key renders the visible sentinel">
+      <x:call function="f:t">
+        <x:param select="'no.such.key'" />
+      </x:call>
+      <x:expect label="sentinel" select="'[[no.such.key]]'" />
+    </x:scenario>
+    <x:scenario label="schema-row chrome keys exist">
+      <x:call function="f:t">
+        <x:param select="'schema.rel.primary'" />
+      </x:call>
+      <x:expect label="primary" select="'primary'" />
+    </x:scenario>
+    <x:scenario label="edge status keys exist">
+      <x:call function="f:t">
+        <x:param select="'schema.status.notLoaded'" />
+      </x:call>
+      <x:expect label="not loaded" select="'not loaded'" />
+    </x:scenario>
+    <x:scenario label="see-also relation phrase keys exist">
+      <x:call function="f:t">
+        <x:param select="'seeAlso.as'" />
+      </x:call>
+      <x:expect label="as" select="'as'" />
+    </x:scenario>
+    <x:scenario label="versioning note key exists">
+      <x:call function="f:t">
+        <x:param select="'versioning.note'" />
+      </x:call>
+      <x:expect
+        label="note text"
+        select="'Documentation shows the source annotations and does not apply conditional inclusion filtering by default.'" />
+    </x:scenario>
+    <x:scenario label="diagnostic context segment keys exist">
+      <x:call function="f:t">
+        <x:param select="'diag.ctxNotRecognized'" />
+      </x:call>
+      <x:expect label="segment" select="'is not a recognized XSD construct.'" />
+    </x:scenario>
+    <x:scenario label="value constraint keys exist">
+      <x:call function="f:t">
+        <x:param select="'value.default'" />
+      </x:call>
+      <x:expect label="default" select="'default'" />
+    </x:scenario>
+    <x:scenario label="boolean display keys exist">
+      <x:call function="f:t">
+        <x:param select="'msg.yes'" />
+      </x:call>
+      <x:expect label="yes" select="'yes'" />
+    </x:scenario>
+    <x:scenario label="wildcard row header keys exist">
+      <x:call function="f:t">
+        <x:param select="'wildcard.anyAttribute'" />
+      </x:call>
+      <x:expect label="anyAttribute" select="'anyAttribute'" />
+    </x:scenario>
+    <x:scenario label="inline marker key exists">
+      <x:call function="f:t">
+        <x:param select="'msg.anonymous'" />
+      </x:call>
+      <x:expect label="anonymous" select="'anonymous'" />
+    </x:scenario>
+    <x:scenario label="type alternative fallback key exists">
+      <x:call function="f:t">
+        <x:param select="'typeAlt.implicitFallback'" />
+      </x:call>
+      <x:expect label="fallback phrase" select="'implicit fallback to @type'" />
+    </x:scenario>
+    <x:scenario label="a parameterised key substitutes named placeholders">
+      <x:call function="f:t">
+        <x:param select="'facet.enumerationCount'" />
+        <x:param select="map { 'count': 12 }" />
+      </x:call>
+      <x:expect label="substituted count" select="'12 enumeration values'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:format-message — placeholder substitution">
+    <x:scenario label="repeated placeholder substitutes every occurrence">
+      <x:call function="f:format-message">
+        <x:param select="'{a}-{a}-{b}'" />
+        <x:param select="map { 'a': 'x', 'b': 'y' }" />
+      </x:call>
+      <x:expect label="x-x-y" select="'x-x-y'" />
+    </x:scenario>
+    <x:scenario label="empty params leaves the template untouched">
+      <x:call function="f:format-message">
+        <x:param select="'no placeholders here'" />
+        <x:param select="map {}" />
+      </x:call>
+      <x:expect label="passthrough" select="'no placeholders here'" />
+    </x:scenario>
+    <x:scenario label="replacement-string metacharacters in a value are literal">
+      <x:call function="f:format-message">
+        <x:param select="'uri: {uri}'" />
+        <x:param select="map { 'uri': 'file:///c$/a\b' }" />
+      </x:call>
+      <x:expect label="dollar and backslash survive verbatim" select="'uri: file:///c$/a\b'" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

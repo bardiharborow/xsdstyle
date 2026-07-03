@@ -4,3 +4,6 @@ out/
 test/xspec/
 specifications/
 reference/
+
+# Claude Code personal settings
+.claude/settings.local.json

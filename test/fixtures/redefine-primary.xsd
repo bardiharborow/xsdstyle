@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:tns="urn:example:redefine"
+  targetNamespace="urn:example:redefine">
+  <xs:redefine schemaLocation="redefine-base.xsd">
+    <xs:complexType name="BaseThing">
+      <xs:complexContent>
+        <xs:extension base="tns:BaseThing">
+          <xs:sequence>
+            <xs:element name="extra" type="xs:string" />
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="Thing" type="tns:BaseThing" />
+</xs:schema>

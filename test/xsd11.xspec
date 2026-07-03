@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  stylesheet="../xsdstyle.xsl"
+  run-as="external">
+  <x:scenario label="XSD 1.1 constructs">
+    <x:scenario label="schema default attributes are exposed">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example" defaultAttributes="tns:CommonAttrs">
+          <xs:attributeGroup name="CommonAttrs">
+            <xs:attribute name="lang" type="xs:language" />
+          </xs:attributeGroup>
+          <xs:complexType name="WithDefaults">
+            <xs:sequence />
+          </xs:complexType>
+          <xs:complexType name="WithoutDefaults" defaultAttributesApply="false">
+            <xs:sequence />
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="default group is linked unless defaultAttributesApply is false"
+        test="exists($x:result//article[@id eq 'ct-WithDefaults']//section[*[@id eq 'ct-WithDefaults-default-attrs-title']]//a[@href eq '#ag-CommonAttrs'])
+          and exists($x:result//article[@id eq 'ct-WithDefaults']//section[*[@id eq 'ct-WithDefaults-default-attrs-title']]//code[. eq 'lang'])
+          and exists($x:result//article[@id eq 'ct-WithoutDefaults']//section[*[@id eq 'ct-WithoutDefaults-default-attrs-title']][contains(., 'not applied')])" />
+    </x:scenario>
+
+    <x:scenario label="notation facets link to notation components">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:notation name="Gif" public="image/gif" />
+          <xs:simpleType name="ImageType">
+            <xs:restriction base="xs:NOTATION">
+              <xs:enumeration value="tns:Gif">
+                <xs:annotation>
+                  <xs:documentation>GIF image.</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="facet name links externally and NOTATION value links internally with documentation"
+        test="exists($x:result//article[@id eq 'st-ImageType']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#rf-enumeration'])
+          and exists($x:result//article[@id eq 'st-ImageType']//a[@href eq '#no-Gif'][. eq 'tns:Gif'])
+          and exists($x:result//article[@id eq 'st-ImageType']//div[@class eq 'doc is-clampable'][contains(., 'GIF image.')])" />
+    </x:scenario>
+
+    <x:scenario label="XSD 1.1 wildcard and CTA details are linked">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Blocked" type="xs:string" />
+          <xs:attribute name="blocked" type="xs:string" />
+          <xs:complexType name="Base">
+            <xs:attribute name="scope" type="xs:string" inheritable="true" />
+          </xs:complexType>
+          <xs:complexType name="WithWildcardsAndAlternatives">
+            <xs:complexContent>
+              <xs:extension base="tns:Base">
+                <xs:sequence>
+                  <xs:any notQName="##defined tns:Blocked" processContents="lax" />
+                  <xs:element name="choice" type="xs:string">
+                    <xs:alternative test="@scope = 'typed'" type="xs:anyType" />
+                  </xs:element>
+                </xs:sequence>
+                <xs:anyAttribute notQName="##definedSibling tns:blocked" />
+              </xs:extension>
+            </xs:complexContent>
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="notQName QNames link internally, xs:anyType links to Part 1, and CTA inherited attributes are shown"
+        test="exists($x:result//article[@id eq 'ct-WithWildcardsAndAlternatives']//a[@href eq '#el-Blocked'][. eq 'tns:Blocked'])
+          and exists($x:result//article[@id eq 'ct-WithWildcardsAndAlternatives']//a[@href eq '#at-blocked'][. eq 'tns:blocked'])
+          and exists($x:result//article[@id eq 'ct-WithWildcardsAndAlternatives']//a[@href eq 'https://www.w3.org/TR/xmlschema11-1/#anyType'][. eq 'xs:anyType'])
+          and exists($x:result//article[@id eq 'ct-WithWildcardsAndAlternatives']//div[@class eq 'type-alternatives__inherited']//code[. eq '@scope'])" />
+    </x:scenario>
+
+    <x:scenario label="documentation chrome exposes language and expansion controls">
+      <x:context>
+        <xs:schema targetNamespace="urn:example">
+          <xs:element name="Documented">
+            <xs:annotation>
+              <xs:documentation xml:lang="fr" source="https://example.test/doc">Bonjour.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="language badge, clamp toggle, and source link render"
+        test="exists($x:result//article[@id eq 'el-Documented']//span[@class eq 'component__doc-lang'][. eq 'fr'])
+          and exists($x:result//article[@id eq 'el-Documented']//button[@class eq 'doc__toggle'][@data-more eq 'Show more'][@data-less eq 'Show less'])
+          and exists($x:result//article[@id eq 'el-Documented']//a[@class eq 'component__doc-source'][@href eq 'https://example.test/doc'][. eq 'source'])" />
+    </x:scenario>
+
+    <x:scenario label="default and explicit open content are described">
+      <x:context>
+        <xs:schema targetNamespace="urn:example" defaultAttributesApply="false" xmlns:tns="urn:example">
+          <xs:defaultOpenContent mode="suffix" appliesToEmpty="true">
+            <xs:any namespace="##other" processContents="lax" />
+          </xs:defaultOpenContent>
+          <xs:complexType name="InheritsOpenContent">
+            <xs:sequence>
+              <xs:element name="value" type="xs:string" />
+            </xs:sequence>
+          </xs:complexType>
+          <xs:complexType name="HasOpenContent">
+            <xs:openContent mode="interleave">
+              <xs:any namespace="##any" processContents="skip" />
+            </xs:openContent>
+            <xs:sequence />
+          </xs:complexType>
+          <xs:complexType name="TextWithUnit">
+            <xs:simpleContent>
+              <xs:extension base="xs:string">
+                <xs:attribute name="unit" type="xs:string" />
+              </xs:extension>
+            </xs:simpleContent>
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="overview and component details expose defaultOpenContent and openContent controls, and simple-content types receive no effective open content"
+        test="exists($x:result//section[*[@id eq 'overview-defaults-title']]//dt[. eq 'Default attributes apply'])
+          and exists($x:result//section[*[@id eq 'overview-defaults-title']]//code[. eq 'false'])
+          and exists($x:result//section[*[@id eq 'overview-defaults-title']]//span[@data-comp eq 'defaultOpenContent'])
+          and exists($x:result//section[*[@id eq 'overview-defaults-title']]//span[@class eq 'chip'][. eq 'mode=suffix'])
+          and exists($x:result//section[*[@id eq 'overview-defaults-title']]//span[@class eq 'chip'][. eq 'appliesToEmpty=true'])
+          and exists($x:result//article[@id eq 'ct-InheritsOpenContent']//p[@class eq 'muted'][contains(., 'default open content')])
+          and exists($x:result//article[@id eq 'ct-HasOpenContent']//span[@data-comp eq 'openContent'])
+          and exists($x:result//article[@id eq 'ct-HasOpenContent']//span[@class eq 'chip'][. eq 'mode=interleave'])
+          and empty($x:result//article[@id eq 'ct-TextWithUnit']//section[*[@id eq 'ct-TextWithUnit-open-content-title']])" />
+    </x:scenario>
+
+    <x:scenario label="assertions and type alternative fallback cases render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:complexType name="Asserted">
+            <xs:sequence />
+            <xs:assert test="@code castable as xs:integer" xpathDefaultNamespace="##targetNamespace">
+              <xs:annotation>
+                <xs:documentation>Code must be numeric.</xs:documentation>
+              </xs:annotation>
+            </xs:assert>
+          </xs:complexType>
+          <xs:element name="Classified" type="xs:string">
+            <xs:alternative test="@kind = 'anonymous'">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="anon" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:alternative>
+            <xs:alternative test="@kind = 'error'" />
+            <xs:alternative type="tns:Asserted" />
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="assertion rows and alternative anonymous/error/otherwise branches render"
+        test="exists($x:result//article[@id eq 'ct-Asserted']//section[*[@id eq 'ct-Asserted-assertions-title']]//code[. eq '@code castable as xs:integer'])
+          and exists($x:result//article[@id eq 'ct-Asserted']//section[*[@id eq 'ct-Asserted-assertions-title']]//div[@class eq 'muted'][contains(., 'xpathDefaultNamespace')])
+          and exists($x:result//article[@id eq 'ct-Asserted']//section[*[@id eq 'ct-Asserted-assertions-title']]//div[@class eq 'doc is-clampable'][contains(., 'Code must be numeric.')])
+          and exists($x:result//article[@id eq 'el-Classified']//span[@class eq 'inline-marker'][. eq 'anonymous'])
+          and exists($x:result//article[@id eq 'el-Classified']//code[. eq 'xs:error'])
+          and exists($x:result//article[@id eq 'el-Classified']//em[. eq 'otherwise'])
+          and exists($x:result//article[@id eq 'el-Classified']//a[@href eq '#ct-Asserted'][. eq 'tns:Asserted'])" />
+    </x:scenario>
+
+    <x:scenario label="assertions inside anonymous complex types render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:element name="Checked">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="amount" type="xs:decimal" />
+              </xs:sequence>
+              <xs:assert test="amount ge 0" />
+            </xs:complexType>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="the inline type block carries an assertions table with the test expression"
+        test="exists($x:result//article[@id eq 'el-Checked']//section[*[@id eq 'el-Checked-inline-type-title']]//section[*[ends-with(@id, '-assertions-title')]]//code[. eq 'amount ge 0'])
+          and exists($x:result//article[@id eq 'el-Checked']//table/caption[. eq 'Assertions for anonymous complex type'])" />
+    </x:scenario>
+
+    <x:scenario label="list, union, and unspecified simple type varieties render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:simpleType name="TokenList">
+            <xs:list itemType="xs:token" />
+          </xs:simpleType>
+          <xs:simpleType name="CodeUnion">
+            <xs:union memberTypes="xs:string tns:TokenList" />
+          </xs:simpleType>
+          <xs:simpleType name="EmptySimple" />
+          <xs:element name="InlineUnion">
+            <xs:simpleType>
+              <xs:union memberTypes="xs:string tns:TokenList" />
+            </xs:simpleType>
+          </xs:element>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="global and inline simple type varieties are described and member types are linked"
+        test="exists($x:result//article[@id eq 'st-TokenList']//dd[. eq 'list'])
+          and exists($x:result//article[@id eq 'st-TokenList']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#token'][. eq 'xs:token'])
+          and exists($x:result//article[@id eq 'st-CodeUnion']//dd[. eq 'union'])
+          and exists($x:result//article[@id eq 'st-CodeUnion']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#string'][. eq 'xs:string'])
+          and exists($x:result//article[@id eq 'st-CodeUnion']//a[@href eq '#st-TokenList'][. eq 'tns:TokenList'])
+          and exists($x:result//article[@id eq 'st-EmptySimple']//dd[. eq 'not specified in source'])
+          and exists($x:result//article[@id eq 'el-InlineUnion']//section[*[@id eq 'el-InlineUnion-inline-type-title']]//p[@class eq 'inline-def'][@data-derivation eq 'union'])
+          and exists($x:result//article[@id eq 'el-InlineUnion']//section[*[@id eq 'el-InlineUnion-inline-type-title']]//a[@href eq '#st-TokenList'][. eq 'tns:TokenList'])" />
+      <x:expect
+        label="the derivation method renders as a labelled Derived by row, omitted without a derivation child"
+        test="exists($x:result//article[@id eq 'st-TokenList']//div[dt[. eq 'Derived by']]/dd[@data-derivation eq 'list'][. eq 'list'])
+          and exists($x:result//article[@id eq 'st-CodeUnion']//dd[@data-derivation eq 'union'][. eq 'union'])
+          and exists($x:result//article[@id eq 'el-InlineUnion']//section[*[@id eq 'el-InlineUnion-inline-type-title']]//p[@class eq 'inline-def']/span[@class eq 'chip'][@data-derivation eq 'union'][. eq 'union'])
+          and empty($x:result//article[@id eq 'st-EmptySimple']//dd[@data-derivation])" />
+    </x:scenario>
+
+    <x:scenario label="inline base, item, and member simple types render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:simpleType name="InlineBase">
+            <xs:restriction>
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:maxLength value="4" />
+                </xs:restriction>
+              </xs:simpleType>
+              <xs:minLength value="1" />
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType name="InlineItems">
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:token" />
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:simpleType name="InlineMembers">
+            <xs:union>
+              <xs:simpleType>
+                <xs:restriction base="xs:date" />
+              </xs:simpleType>
+              <xs:simpleType>
+                <xs:restriction base="xs:token" />
+              </xs:simpleType>
+            </xs:union>
+          </xs:simpleType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="anonymous base, item, and member types are rendered inline"
+        test="exists($x:result//article[@id eq 'st-InlineBase']//div[@class eq 'inline-type inline-type--base']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#string'])
+          and exists($x:result//article[@id eq 'st-InlineItems']//div[@class eq 'inline-type inline-type--item']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#token'])
+          and exists($x:result//article[@id eq 'st-InlineMembers']//div[@class eq 'inline-type inline-type--member']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#date'])
+          and exists($x:result//article[@id eq 'st-InlineMembers']//div[@class eq 'inline-type inline-type--member']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#token'])" />
+    </x:scenario>
+
+    <x:scenario label="simple type variety is computed through the base chain">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:simpleType name="Plain">
+            <xs:restriction base="xs:string" />
+          </xs:simpleType>
+          <xs:simpleType name="BaseList">
+            <xs:list itemType="xs:token" />
+          </xs:simpleType>
+          <xs:simpleType name="RestrictedList">
+            <xs:restriction base="tns:BaseList">
+              <xs:maxLength value="3" />
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType name="Opaque">
+            <xs:restriction base="tns:NotThere" />
+          </xs:simpleType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="restrictions report the variety of their resolved base, with an honest fallback"
+        test="exists($x:result//article[@id eq 'st-Plain']//dd[@data-variety eq 'atomic'][. eq 'atomic'])
+          and exists($x:result//article[@id eq 'st-RestrictedList']//dd[@data-variety eq 'list'][. eq 'list'])
+          and exists($x:result//article[@id eq 'st-Opaque']//dd[@data-variety eq 'unknown'])" />
+      <x:expect
+        label="derivation method stays restriction even when the variety comes from the base chain"
+        test="exists($x:result//article[@id eq 'st-RestrictedList']//dd[@data-derivation eq 'restriction'][. eq 'restriction'])
+          and exists($x:result//article[@id eq 'st-Plain']//dd[@data-derivation eq 'restriction'])" />
+    </x:scenario>
+
+    <x:scenario label="component flags, versioning attributes, and assertion facets render">
+      <x:context>
+        <xs:schema
+          xmlns:tns="urn:example"
+          xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+          targetNamespace="urn:example">
+          <xs:element name="Maybe" type="xs:dateTimeStamp" abstract="true" nillable="true" vc:minVersion="1.1" />
+          <xs:complexType name="Mixed" mixed="true">
+            <xs:sequence />
+          </xs:complexType>
+          <xs:simpleType name="CheckedString">
+            <xs:restriction base="xs:string">
+              <xs:assertion test="string-length($value) gt 2" xpathDefaultNamespace="##targetNamespace" />
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType name="StampedTime">
+            <xs:restriction base="xs:dateTime">
+              <xs:explicitTimezone value="required" />
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="abstract/mixed/nillable flags, vc attributes, XSD 1.1 builtin badges, and assertion facets render"
+        test="exists($x:result//article[@id eq 'el-Maybe']//span[@data-flag eq 'abstract'])
+          and exists($x:result//article[@id eq 'el-Maybe']//span[@data-flag eq 'nillable'])
+          and exists($x:result//article[@id eq 'el-Maybe']//span[@data-flag eq 'xsd11'])
+          and exists($x:result//article[@id eq 'el-Maybe']//section[*[@id eq 'el-Maybe-versioning-title']]//code[. eq 'vc:minVersion'])
+          and exists($x:result//article[@id eq 'el-Maybe']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#dateTimeStamp'])
+          and exists($x:result//article[@id eq 'el-Maybe']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#dateTimeStamp']/following-sibling::span[@data-flag eq 'xsd11'])
+          and exists($x:result//article[@id eq 'ct-Mixed']//span[@data-flag eq 'mixed'])
+          and exists($x:result//article[@id eq 'st-CheckedString']//tr[contains(@id, 'facet-assertion')]//code[. eq 'string-length($value) gt 2'])
+          and exists($x:result//article[@id eq 'st-CheckedString']//tr[contains(@id, 'facet-assertion')]//div[@class eq 'muted'][contains(., 'xpathDefaultNamespace')]//code[. eq '##targetNamespace'])
+          and exists($x:result//article[@id eq 'st-CheckedString']//tr[contains(@id, 'facet-assertion')]/th//span[@data-flag eq 'xsd11'])
+          and exists($x:result//article[@id eq 'st-StampedTime']//tr[contains(@id, 'facet-explicitTimezone')]/th//span[@data-flag eq 'xsd11'])" />
+    </x:scenario>
+
+    <x:scenario label="versioning annotations are grouped by owning component">
+      <x:context>
+        <xs:schema
+          xmlns:tns="urn:example"
+          xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+          targetNamespace="urn:example">
+          <xs:complexType name="Versioned">
+            <xs:sequence>
+              <xs:element name="newer" type="xs:string" vc:minVersion="1.1" />
+            </xs:sequence>
+          </xs:complexType>
+          <xs:element name="Plain" type="xs:string" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="the feature summary links the nearest named owning component of nested vc attributes"
+        test="exists($x:result//div[contains-token(@class, 'featuregroup')]//li[code eq 'vc:*']//a[@class eq 'xref xref--int'][@href eq '#ct-Versioned'])
+          and empty($x:result//div[contains-token(@class, 'featuregroup')]//li[code eq 'vc:*']//a[@href eq '#el-Plain'])" />
+    </x:scenario>
+
+    <x:scenario label="wildcard annotations, provenance, and token labels render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:attributeGroup name="VendorAttrs">
+            <xs:anyAttribute namespace="##other" processContents="lax" />
+          </xs:attributeGroup>
+          <xs:complexType name="Holder">
+            <xs:sequence>
+              <xs:any namespace="##other" minOccurs="0" processContents="lax">
+                <xs:annotation>
+                  <xs:documentation>Extension point.</xs:documentation>
+                </xs:annotation>
+              </xs:any>
+            </xs:sequence>
+            <xs:attributeGroup ref="tns:VendorAttrs" />
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="wildcard annotations render, provenance is machine-readable, and tokens carry placement labels"
+        test="exists($x:result//article[@id eq 'ct-Holder']//div[@class eq 'tree']//div[contains-token(@class, 'tree__node')][.//span[@data-comp eq 'any']]//div[@class eq 'doc is-clampable'][contains(., 'Extension point.')])
+          and exists($x:result//article[@id eq 'ct-Holder']//div[@class eq 'tree']//span[@class eq 'wildcard-provenance'][@data-provenance eq 'direct'])
+          and exists($x:result//article[@id eq 'ag-VendorAttrs']//table//span[@class eq 'wildcard-provenance'][@data-provenance eq 'attribute-group'])
+          and exists($x:result//article[@id eq 'ct-Holder']//table//span[@class eq 'wildcard-provenance'][@data-provenance eq 'attribute-group'])
+          and exists($x:result//article[@id eq 'ct-Holder']//code[@class eq 'wildcard-token'][. eq '##other'][@data-wildcard-attr eq 'namespace'][@data-wildcard-kind eq 'element'][@title])
+          and exists($x:result//article[@id eq 'ag-VendorAttrs']//code[@class eq 'wildcard-token'][. eq '##other'][@data-wildcard-attr eq 'namespace'][@data-wildcard-kind eq 'attribute'][@title])" />
+    </x:scenario>
+
+    <x:scenario label="notation system identifiers and negative wildcard namespaces render">
+      <x:context>
+        <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
+          <xs:notation name="Svg" public="image/svg+xml" system="https://example.test/svg" />
+          <xs:complexType name="WildcardAttributes">
+            <xs:attribute name="localQ" type="xs:string" form="qualified" />
+            <xs:attribute name="foreign" type="xs:string" targetNamespace="urn:other" />
+            <xs:anyAttribute namespace="##any" notNamespace="urn:blocked ##local" processContents="lax">
+              <xs:annotation>
+                <xs:documentation>Vendor attributes are tolerated.</xs:documentation>
+              </xs:annotation>
+            </xs:anyAttribute>
+          </xs:complexType>
+          <xs:complexType name="TnsOverride">
+            <xs:sequence>
+              <xs:element name="alt" targetNamespace="urn:other" type="xs:string" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="notation public/system IDs render once (no Properties duplicate), anyAttribute tokens and annotations, and local targetNamespace/form render"
+        test="exists($x:result//article[@id eq 'no-Svg']//dt[. eq 'Public'])
+          and exists($x:result//article[@id eq 'no-Svg']//dt[. eq 'System'])
+          and exists($x:result//article[@id eq 'no-Svg']//code[. eq 'https://example.test/svg'])
+          and empty($x:result//article[@id eq 'no-Svg']//section[*[@id eq 'no-Svg-props-title']])
+          and exists($x:result//article[@id eq 'ct-WildcardAttributes']//tr[th[1] = 'anyAttribute']//code[@class eq 'wildcard-ns'][. eq 'urn:blocked'])
+          and exists($x:result//article[@id eq 'ct-WildcardAttributes']//tr[th[1] = 'anyAttribute']//code[@class eq 'wildcard-token'][. eq '##local'])
+          and exists($x:result//article[@id eq 'ct-WildcardAttributes']//tr[th[1] = 'anyAttribute']//div[@class eq 'doc is-clampable'][contains(., 'Vendor attributes are tolerated.')])
+          and exists($x:result//article[@id eq 'ct-WildcardAttributes']//tr[th//code[bdi eq 'localQ']]//span[@data-particle-flag eq 'form'])
+          and exists($x:result//article[@id eq 'ct-WildcardAttributes']//tr[th//code[bdi eq 'foreign']]//span[@data-particle-flag eq 'targetNamespace'])
+          and exists($x:result//article[@id eq 'ct-TnsOverride']//div[@class eq 'tree']//span[@data-particle-flag eq 'targetNamespace'])" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

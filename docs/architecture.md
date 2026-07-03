@@ -1,499 +1,920 @@
-# xsdstyle — architecture
+# XSD Documentation Generator Architecture
 
-This document is the authoritative design for the XSLT 3.0 stylesheet at
-`xsdstyle.xsl`. It is the contract the implementation must satisfy: where
-this document and the stylesheet disagree, this document is wrong and should
-be amended (rather than silently allowing drift).
+This document describes the implementation architecture of the generator
+specified in `docs/specification.md`.
 
-The W3C specifications for XSD 1.1 (Parts 1 & 2) and XSLT 3.0 live in
-`specifications/` and are authoritative for terminology and feature semantics.
+The specification is the product contract. This architecture describes how the
+stylesheet should satisfy that contract in a maintainable way. When the two
+documents disagree, `docs/specification.md` wins.
 
-## 1. Goals and non-goals
+The document has two audiences:
 
-### 1.1 Goals
+- Contributors changing `xsdstyle.xsl`, who need the phase boundaries,
+  record shapes, and rendering invariants.
+- Reviewers comparing behavior to the product contract, who need to know which
+  implementation choices are intentional and which are current gaps.
 
-- **Comprehensive XSD 1.1 rendering.** Every construct defined in _W3C XML
-  Schema Definition Language (XSD) 1.1 Part 1: Structures_ and _Part 2:
-  Datatypes_ should be either rendered visually or surfaced as metadata in the
-  generated HTML.
-- **XSLT 3.0 throughout.** The implementation language is XSLT 3.0 as defined
-  in the W3C _XSL Transformations (XSLT) Version 3.0_ recommendation. Saxon-HE
-  13 is the target processor.
-- **Single-file stylesheet.** No `xsl:include`, no `xsl:import`, no
-  `xsl:package`, no`xsl:use-package`. One file, organised into clearly
-  delineated regions with shared functions and modes.
-- **Multi-schema collection walk.** Honour `xs:import`, `xs:include`,
-  `xs:redefine`, and `xs:override` transitively, with the chameleon-include
-  rule applied to includes whose target schema lacks a `targetNamespace`.
-- **Static, accessible HTML.** The output is a single self-contained HTML page
-  that renders correctly without JavaScript. JS adds search and
-  expand-all-affordances; it never adds content.
-- **Deterministic output.** Given the same input schema and parameters, two
-  runs produce byte-identical HTML.
+The default distribution remains a single stylesheet. The "layers" below are
+organizational boundaries inside that file, not separate modules or packages.
 
-### 1.2 Non-goals
+This document describes the target architecture, not a waiver from the product
+contract. Where the current stylesheet has not reached the target, section 19
+names the gap explicitly. Do not soften earlier sections to match a temporary
+implementation limitation; fix the limitation or keep it listed as a gap.
 
-- **Sample XML instance generation.** (Possible follow-up.)
-- **Schema validation.** We trust the input. We do not check that the schema
-  is internally consistent or that referenced QNames resolve.
-- **Multi-file output.** One HTML file per invocation.
-- **Browser-side framework dependencies.** No bundlers, no transpilation, no
-  CSS preprocessors.
+When a behavior change affects what users see, update the specification first.
+When a markup or asset hook changes, update the DOM contract in the same
+change. Architecture changes should explain where a fact is produced, how it is
+keyed, and which renderer consumes it.
 
-## 2. XSD 1.1 coverage matrix
+## 1. Architectural Goals
 
-The table below enumerates the XSD 1.1 constructs the new stylesheet must
-recognise. "Where rendered" names the HTML region; "Indicator" names the
-visible cue.
+The generator should be built around a small number of explicit phases:
 
-| Construct (Part 1 §)                                           | XSD 1.0? | XSD 1.1?            | Where rendered                                                                                            | Indicator                                     |
-| -------------------------------------------------------------- | -------- | ------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `xs:schema` (§3.1)                                             | ✅       | ✅                  | Overview card                                                                                             | Target NS, location, attribute defaults       |
-| `xs:element` (§3.3)                                            | ✅       | ✅                  | `components--element` section                                                                             | Per-component card                            |
-| `xs:attribute` (§3.2)                                          | ✅       | ✅                  | Attribute table + global section                                                                          | Row in table; card for globals                |
-| `xs:complexType` (§3.4)                                        | ✅       | ✅                  | `components--complex-type` section                                                                        | Per-component card                            |
-| `xs:simpleType` (§3.16)                                        | ✅       | ✅                  | `components--simple-type` section                                                                         | Per-component card                            |
-| `xs:group` (§3.7)                                              | ✅       | ✅                  | `components--group` section                                                                               | Per-component card                            |
-| `xs:attributeGroup` (§3.6)                                     | ✅       | ✅                  | `components--attribute-group` section                                                                     | Per-component card                            |
-| `xs:notation` (§3.12)                                          | ✅       | ✅                  | `components--notation` section                                                                            | Per-component card                            |
-| `xs:key` / `xs:keyref` / `xs:unique` (§3.11)                   | ✅       | ✅                  | `component__identity-constraints`                                                                         | Constraint table                              |
-| `xs:import` (§4.2.6)                                           | ✅       | ✅                  | Overview "Schemas" card                                                                                   | Row per import                                |
-| `xs:include` (§4.2.3)                                          | ✅       | ✅                  | Overview "Schemas" card                                                                                   | Row per include, with chameleon note          |
-| `xs:redefine` (§4.2.5)                                         | ✅       | ❌ (deprecated 1.1) | Overview + per-component badge                                                                            | `badge--redefined`                            |
-| `xs:override` (§4.2.5)                                         | ❌       | ✅                  | Overview + per-component badge                                                                            | `badge--overridden`                           |
-| `xs:assert` (§3.13)                                            | ❌       | ✅                  | `component__assertions`                                                                                   | Code-formatted XPath rows                     |
-| `xs:alternative` (§3.4.4.3, CTA)                               | ❌       | ✅                  | `component__type-alternatives`                                                                            | Conditional rows + CTA context note           |
-| `xs:openContent` (§3.4.1.4)                                    | ❌       | ✅                  | `component__open-content`                                                                                 | Mode badge + wildcard                         |
-| `xs:defaultOpenContent` (§3.16.2.2)                            | ❌       | ✅                  | Overview "Defaults" card + per-type footnote                                                              | Effective mode + footnote                     |
-| `@defaultAttributes` (§3.1) / `@defaultAttributesApply` (§3.4) | ❌       | ✅                  | Overview "Defaults" + per-type footnote                                                                   | "Default attrs applied" footnote              |
-| `@inheritable` on `xs:attribute` (§3.2.2)                      | ❌       | ✅                  | Attribute table                                                                                           | Dedicated **Inheritable** column              |
-| Inheritable attrs in CTA context (§3.4.4.3)                    | ❌       | ✅                  | `component__type-alternatives` sub-block                                                                  | "Inherited test-context attributes" list      |
-| `xs:all` with `maxOccurs>1` / wildcards (§3.8.1)               | ❌       | ✅                  | Content model                                                                                             | Occurrence marker + wildcard inner            |
-| `xs:any/@notQName` w/ XSD-1.1 tokens (§3.10)                   | ❌       | ✅                  | Wildcard inner                                                                                            | Code tokens (`##defined`, `##definedSibling`) |
-| `vc:minVersion`, `vc:maxVersion` (App. F)                      | ❌       | ✅                  | Component header badge + per-component "Version controls" panel + overview "XSD 1.1 features in use" card | `badge--vc-decorated`; aggregated list        |
-| `vc:typeAvailable` / `vc:typeUnavailable` (App. F)             | ❌       | ✅                  | Same as above                                                                                             | Same                                          |
-| `vc:facetAvailable` / `vc:facetUnavailable` (App. F)           | ❌       | ✅                  | Same as above                                                                                             | Same                                          |
-| Built-in primitives & derivations (Part 2)                     | ✅       | ✅                  | Type references resolve to W3C spec URLs                                                                  | `<a href="…">` to external doc                |
-| `xs:list` / `xs:union` (§3.16.6)                               | ✅       | ✅                  | Simple-type derivation panel                                                                              | Composition shown inline                      |
-| Facets (length, pattern, enumeration, totalDigits, …)          | ✅       | ✅                  | `component__facets`                                                                                       | Facet table; values rendered as code          |
-| Substitution groups (§3.3.6)                                   | ✅       | ✅                  | `component__see-also`                                                                                     | Member list + transitive head chain           |
+1. Normalize parameters.
+2. Collect the schema document graph.
+3. Build a documentation model from the loaded schemas.
+4. Build indexes and diagnostics over that model.
+5. Render deterministic, accessible HTML.
+6. Let CSS and JavaScript progressively enhance the already complete HTML.
 
-The coverage matrix is exercised by the XSpec suite in `test/` and by
-`make smoke-test`, which renders the W3C XSD-of-XSDs end-to-end and
-validates the resulting HTML/CSS with vnu.jar.
+The most important architectural rule is that rendering should not directly
+discover facts by repeatedly scanning raw schema nodes. Raw XSD nodes remain
+available for source rendering and local context, but cross-reference
+resolution, diagnostics, anchors, schema membership, and feature summaries
+should be driven by model records or shared indexes.
 
-## 3. XSLT 3.0 features leveraged
+This keeps the behavior understandable as coverage grows from simple component
+cards to the full XSD 1.0 and XSD 1.1 surface.
 
-The stylesheet leans on XSLT 3.0 features pragmatically — we use 3.0 features
-only where they remove ceremony or buy us correctness, not for novelty.
+## 2. Implementation Shape
 
-- **Maps and arrays** for the component catalog and the kind dispatch table.
-- **`xsl:iterate` with `xsl:break`** for the schema-collection graph walk.
-- **Accumulators** for `nsid` minting (synthetic IDs for secondary
-  namespaces). One pass over the schema collection emits a stable ID per
-  distinct namespace URI without round-tripping through a lookup map.
-- **`xsl:try` / `xsl:catch`** wrapping each `doc()` call in
-  `x:collect-schemas`.
-- **Higher-order `fold-left`** for the base-chain walk in inherited-content
-  rendering.
-- **`xsl:mode` with `on-no-match`**
-- **JSON output via `serialize()`** for the embedded search index.
-- **Sequence types everywhere.** Every function and template signature
-  declares `as=` to catch type drift at compile time.
+The default distribution should remain one top-level XSLT 3.0 stylesheet,
+`xsdstyle.xsl`, with no required package graph. Conceptually, however, the
+stylesheet should be organized as layers:
 
-We **do not** use:
+| Layer         | Responsibility                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Configuration | Public parameters, parameter validation, i18n message catalogs, static XSD catalogs.           |
+| Collection    | Load the primary schema and reachable schema documents.                                        |
+| Model         | Convert loaded documents into schema, component, reference, and diagnostic records.            |
+| Indexes       | Provide namespace-aware lookup, backlinks, feature summaries, and cycle guards.                |
+| Rendering     | Emit overview, navigation, component sections, contextual constructs, diagnostics, and source. |
+| Assets        | Provide optional CSS and dependency-free JavaScript enhancement.                               |
 
-- `xsl:package` / `xsl:use-package` (single-file mandate).
-- Streaming. The whole-document model — we walk backq and forth across the
-  schema collection too many times — is incompatible.
-- `xsl:fork` / `xsl:merge`. No use case in this pipeline.
+`xsl:mode` should separate rendering concerns. `xsl:function` should handle pure
+helpers and model/index lookup. `xsl:key` may be used for node-backed lookup,
+but maps should be preferred when the lookup target is a model record rather
+than a source node.
 
-## 4. Region layout of the single file
+The stylesheet must not require schema-aware processing or streaming.
 
-`xsdstyle.xsl` is one file, top-to-bottom organised as 15 regions. Each
-region starts with a banner comment containing "Region N. Name" so a grep
-for `Region` jumps between sections.
+Implementation changes should preserve three practical constraints:
 
-| #   | Region                        | Lines (approx.) | Contents                                                                                                                                                                                                                                                                     |
-| --- | ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Preamble                      | 1–30            | `xsl:stylesheet`, namespaces (`xs`, `vc`, `xhtml`, `x`), `xpath-default-namespace`, `xsl:output`, `expand-text`                                                                                                                                                              |
-| 2   | Parameters                    | 30–120          | The 7 `xsl:param`s with type, default, and docblock                                                                                                                                                                                                                          |
-| 3   | Global constants              | 120–200         | XSD/vc namespace URIs, builtin-type catalog, XSD 1.1 token tables                                                                                                                                                                                                            |
-| 4   | Keys                          | 200–280         | `substitutionMembers`, `typeUsersByType`, `typeUsersByBase`, `identityConstraintByQName`, `inheritableAttrsByType`, `openContentByType`, `vcDecorated`                                                                                                                       |
-| 5   | `xsl:mode` declarations       | 280–340         | 10 modes (§6 below)                                                                                                                                                                                                                                                          |
-| 6   | Pure helper functions         | 340–550         | `x:clark`, `x:resolve-qname`, `x:occurs`, `x:occurs-title`, `x:xsd-true`, `x:format-notQName`, `x:safe-href`, `x:abbr`, `x:ns-id`, `x:anchor`, `x:is-xs`, `x:xsd-indent`, `x:vc-attrs`                                                                                       |
-| 7   | Schema-aware helper functions | 550–800         | `x:tns`, `x:relative-source`, `x:anchor-for`, `x:find-component`, `x:owner-component`, `x:owner-type`, `x:component-qname`, `x:component-link`, `x:xs-builtin-href`, `x:is-redefined`, `x:is-overridden`, `x:effective-open-content`, `x:inheritable-attrs`, `x:doc-snippet` |
-| 8   | Schema collection             | 800–900         | `x:collect-schemas` (`xsl:iterate`-based) + diagnostics                                                                                                                                                                                                                      |
-| 9   | Global catalogs               | 900–960         | `$primary`, `$schemas`, `$schema-tns`, `$kinds`, `$all-components`                                                                                                                                                                                                           |
-| 10  | Root template                 | 960–1100        | `xsl:template match="/"`, page skeleton                                                                                                                                                                                                                                      |
-| 11  | Sidebar / TOC / JSON index    | 1100–1350       | TOC builder, per-kind groups, search-index emission                                                                                                                                                                                                                          |
-| 12  | Per-kind component renderers  | 1350–1700       | Named templates per kind (element, complexType, simpleType, attribute, attributeGroup, group, notation)                                                                                                                                                                      |
-| 13  | Sub-renderers                 | 1700–2400       | Model, attribute table, facets, identity constraints, type-alternatives + CTA context, derivation chain, open-content panel, redefine/override decoration                                                                                                                    |
-| 14  | Documentation renderer        | 2400–2600       | `doc-safe` (allowlist + scheme sanitisation) and `doc-permissive` (verbatim) modes                                                                                                                                                                                           |
-| 15  | XSD source pretty-printer     | 2600–2900       | `xsd-source` mode with indentation helper and syntax highlighting                                                                                                                                                                                                            |
+- Keep the public stylesheet self-contained; no `xsl:include`, `xsl:import`,
+  `xsl:package`, or `xsl:use-package`.
+- Prefer deterministic maps, arrays, and sorted sequences over processor- or
+  hash-order-dependent iteration.
+- Keep raw source nodes attached to records whenever source rendering,
+  diagnostics, or local namespace resolution may need them later.
 
-Line ranges are approximate; the banner comments are the authoritative
-boundary markers.
+The single-file constraint does not mean every concern should be interleaved.
+Use regions, named templates, functions, and modes to keep phase boundaries
+obvious inside the file. A contributor should be able to tell whether a change
+belongs to configuration, collection, model construction, indexing, rendering,
+or assets without tracing the entire stylesheet.
 
-## 5. Data model
+## 3. Public Parameter Boundary
 
-### 5.1 Schema collection (`$schemas`)
+The public parameter names are the names in the specification:
 
-A map produced by `x:collect-schemas`. Keys:
+| Parameter                | Internal responsibility                                |
+| ------------------------ | ------------------------------------------------------ |
+| `page-title`             | Override the generated title and main heading.         |
+| `asset-base-uri`         | Prefix generated CSS and JavaScript URLs.              |
+| `show-source`            | Include or omit source fragments.                      |
+| `documentation-markup`   | Select `safe` or `permissive` documentation rendering. |
+| `interface-language`     | Set generated UI language and message lookup.          |
+| `documentation-language` | Fallback language for schema-authored documentation.   |
+| `interface-direction`    | Set or infer page direction.                           |
+| `robots-noindex`         | Emit or omit the robots noindex meta tag.              |
 
-- `'primary'`: the input `xs:schema` element node.
-- `'all'`: a sequence of every `xs:schema` element node reachable from the
-  primary via `xs:import`, `xs:include`, `xs:redefine`, `xs:override`. Each
-  node is the actual element in its source document — chameleon-included
-  schemas keep their original (empty) `@targetNamespace`; the effective
-  namespace is recorded separately.
-- `'ns-by-uri'`: a `map(xs:anyURI, xs:string)` mapping document URI → effective
-  target namespace. For chameleon includes the value is the including
-  schema's target namespace.
-- `'uri-by-ns'`: the reverse mapping (multi-valued).
-- `'errors'`: a sequence of diagnostic messages from failed `doc()` calls.
-- `'nsids'`: a `map(xs:string, xs:string)` mapping effective namespace URI →
-  short ID (`""` for the primary namespace, `"ns1"`, `"ns2"`, … otherwise),
-  derived by the `nsid` accumulator.
+Parameter normalization should produce a single configuration map:
 
-### 5.2 Component catalog (`$all-components`)
-
-A sequence of `map(*)` records, one per top-level component:
-
-```
-{
-  'kind':       'element' | 'complexType' | 'simpleType' | 'attribute'
-              | 'attributeGroup' | 'group' | 'notation',
-  'node':       element(),         (: the XSD source element :)
-  'name':       xs:string,         (: NCName from @name :)
-  'qname':      xs:QName,
-  'ns-id':      xs:string,         (: anchor namespace ID :)
-  'anchor':     xs:string,         (: full HTML id attribute :)
-  'is-redefined': xs:boolean,
-  'is-overridden': xs:boolean,
-  'vc-attrs':   attribute()*,
-  'doc-snippet': xs:string?
+```xquery
+map {
+  'page-title': xs:string,
+  'asset-base-uri': xs:string,
+  'show-source': xs:boolean,
+  'documentation-markup': 'safe' | 'permissive',
+  'interface-language': xs:string,
+  'documentation-language': xs:string,
+  'requested-interface-direction': xs:string,
+  'interface-direction': 'ltr' | 'rtl',
+  'robots-noindex': xs:boolean,
+  'diagnostics': map(*)*
 }
 ```
 
-### 5.3 Link graph
+`page-title` is the empty string when the parameter is unset; the derived
+title is computed downstream. `requested-interface-direction` stores the
+lower-cased parameter value after defaulting to `auto` (an invalid value is
+preserved here and reported as a diagnostic). `interface-direction` is the
+computed HTML direction after applying `auto` inference from
+`interface-language`.
 
-The four keys defined in Region 4 (`substitutionMembers`, `typeUsersByType`,
-`typeUsersByBase`, `identityConstraintByQName`) plus the three new keys
-(`inheritableAttrsByType`, `openContentByType`, `vcDecorated`) form the
-link graph. All key lookups are by Clark-form QName (e.g.
-`{http://example.com/ns}Foo`).
+Invalid parameter values should be normalized to the documented default and
+reported as diagnostics in the generated page.
 
-`vcDecorated` is `match="*[@vc:* | descendant::*[@vc:*]]"` —
-its presence (non-empty key result) tells the per-component renderer to
-include a `badge--vc-decorated` and a `component__vc-controls` sub-block.
+Wrapper tooling should pass through only values the user supplied. Empty action
+inputs or shell variables should not mask stylesheet defaults with empty
+strings unless the parameter explicitly defines empty string as a meaningful
+value, as `page-title` does.
 
-## 6. Rendering pipeline
+## 4. Schema Collection
 
-```
-input.xsd
-  │
-  ▼
-parse + xs:include/import/redefine/override walk
-  │
-  ▼
-x:collect-schemas  ──► $schemas (map with primary, all, ns mappings, errors)
-  │
-  ▼
-build $all-components from $schemas['all']
-  │
-  ▼
-group components by 'kind' (in the canonical order listed in §2)
-  │
-  ▼
-root template emits the HTML skeleton, then dispatches to per-kind renderers
-  │
-  ▼
-per-kind renderer calls sub-renderers (model, attrs, facets, IC, CTA, ...)
-  │
-  ▼
-documentation renderer (safe or permissive) wraps every <xs:documentation>
-  │
-  ▼
-XSD source pretty-printer renders <details><pre> per component if $include-source
-  │
-  ▼
-sidebar + TOC + JSON search index emitted last (so it can reference component anchors)
+Schema collection is a graph walk over `xs:include`, `xs:import`,
+`xs:redefine`, and `xs:override`.
+
+The collection phase should produce document-instance records rather than only
+a sequence of `xs:schema` elements. A document can appear with different
+effective namespaces when the same chameleon schema is included from different
+target namespaces, so URI alone is not a sufficient identity for every
+collected schema instance.
+
+```xquery
+map {
+  'id': xs:string,
+  'uri': xs:string,
+  'node': element(xs:schema)?,
+  'declared-target-namespace': xs:string,
+  'effective-target-namespace': xs:string,
+  'is-primary': xs:boolean,
+  'is-chameleon': xs:boolean,
+  'load-status': 'loaded' | 'not-loaded' | 'not-schema' | 'not-requested',
+  'incoming-edge': map(*)?,
+  'outgoing-edges': map(*)*
+}
 ```
 
-Each arrow corresponds to a region in the file. There is no second pass over
-the schema collection — every walk reads from the catalogs built once.
+An edge record should preserve the authored composition declaration:
 
-## 7. Namespace and QName resolution
-
-XSD's namespace conventions are subtle in two specific places.
-
-### 7.1 Unprefixed QName attribute values
-
-When an attribute like `@type="Foo"` or `@base="Bar"` has no prefix, XSD says
-to resolve it against the in-scope default namespace at the point of the
-reference. But schemas conventionally declare `xmlns="http://www.w3.org/2001/XMLSchema"`
-at the schema root, which would (naively) bind every unprefixed reference to
-the XSD namespace itself. `x:resolve-qname` therefore tries the schema's own
-`@targetNamespace` first, then the default namespace, and reports unresolved
-QNames as a diagnostic on the component catalog.
-
-### 7.2 Chameleon includes
-
-A schema document included via `xs:include` whose own `@targetNamespace` is
-absent inherits the namespace of the including schema. `x:collect-schemas`
-records the effective namespace in `$schemas?ns-by-uri` so downstream code
-sees the same namespace it would see if the include had been "physically"
-substituted.
-
-### 7.3 Clark form as canonical key
-
-All inter-component lookups use Clark form (`{ns-uri}localname`). Two
-identical local names in different namespaces have distinct Clark forms;
-unqualified names use `{}localname`. `x:clark` is the canonical Clark-form
-function. It is the only correct argument to any of the key lookups.
-
-## 8. Documentation processing
-
-`xs:documentation` is rendered via one of two modes selected by the
-`$doc-html` parameter:
-
-- **`safe`** (default). The renderer walks the documentation subtree and
-  copies only elements/attributes that pass an allowlist. The allowed
-  elements roughly match a Markdown-rendered HTML set: `p`, `br`, `ul`,
-  `ol`, `li`, `em`, `strong`, `code`, `pre`, `a`, `h1`–`h6`, `blockquote`,
-  `figure`, `figcaption`, `img`, `table`/`thead`/`tbody`/`tr`/`th`/`td`,
-  `details`, `summary`. Allowed attributes are limited to `id`, `class`,
-  `title`, `lang`, `href` (on `a`), `src` and `alt` (on `img`), and
-  `colspan`/`rowspan` (on `th`/`td`). `href` values pass `x:safe-href`:
-  schemes `javascript:`, `data:`, `vbscript:`, `file:` are rejected
-  (case- and whitespace-insensitive); only `http:`, `https:`, `mailto:`,
-  `tel:`, and same-document fragments are admitted. Disallowed elements
-  have their text content emitted; disallowed attributes are dropped.
-- **`permissive`** (opt-in). The subtree is copied verbatim. This mode is
-  documented as unsafe and is only appropriate when every schema author is
-  trusted, because it can carry `<script>`, `on*=` handlers, etc.
-
-Whitespace in `xs:documentation` is preserved as `<br/>` for explicit
-newlines.
-`xml:lang` propagates onto the wrapper element if present.
-
-## 9. Identity and link strategy
-
-### 9.1 Anchor format
-
-Each rendered component card carries an `id` attribute formed as:
-
-```
-{kind-abbr}-{ns-id}-{name}
+```xquery
+map {
+  'relation': 'include' | 'import' | 'redefine' | 'override',
+  'from-document-id': xs:string,
+  'declared-namespace': xs:string?,
+  'schema-location': xs:string?,
+  'resolved-uri': xs:string?,
+  'source-node': element(),
+  'status': 'loaded' | 'not-loaded' | 'not-requested' | 'cycle-skipped'
+}
 ```
 
-where `kind-abbr` is one of `el` (element), `ct` (complexType), `st`
-(simpleType), `at` (attribute), `ag` (attributeGroup), `gr` (group), `no`
-(notation). `ns-id` is empty (so the leading `-` collapses) for the primary
-namespace, or `ns1`/`ns2`/… for secondary namespaces. `name` is the
-component's local name. Redefined and overridden components get the
-suffixes `-redefined` and `-overridden` respectively.
+Collection rules:
 
-### 9.2 Cross-schema references
+- Resolve relative `schemaLocation` against the base URI of the declaration.
+- Traverse transitively.
+- Guard every load with `doc-available()` before calling `doc()`, so a
+  missing or unparsable document never aborts the transform.
+- Continue after failed loads and record diagnostics.
+- Treat imports without `schemaLocation` as namespace dependencies, not load
+  failures.
+- For `include`, `redefine`, and `override`, apply the chameleon effective
+  namespace when the referenced schema has no `@targetNamespace`. The current
+  stylesheet applies this only for include and redefine; extending it to
+  override is a known gap tracked in section 19.
+- Prevent non-termination using a visited key that includes both resolved URI
+  and effective namespace where chameleon behavior can change identity.
+- Preserve all composition declarations for the overview, even when traversal
+  skips a repeated or cyclic document.
 
-`x:component-link` is the single point of truth for type/element/group/etc.
-references. It distinguishes three cases:
+Collection is deliberately source-honest. It records what the schema author
+declared and what the renderer was able to load; it does not validate that
+imports, includes, redefines, or overrides are legally arranged. A loaded
+document can therefore contribute both useful components and diagnostics about
+the traversal path that reached it.
 
-1. **XSD built-in** (`{http://www.w3.org/2001/XMLSchema}…`) — renders an
-   external `<a href="https://www.w3.org/TR/xmlschema11-2/#…">` to the W3C
-   datatype spec.
-2. **User-defined and resolvable** — renders an internal anchor
-   `<a href="#{x:anchor-for(qname)}">`.
-3. **User-defined and unresolvable** — renders a `<code>` with a `title`
-   attribute explaining the lookup failure.
+Collection records should be immutable once produced. Later phases may derive
+indexes, diagnostics, and display labels from them, but should not rewrite
+collection status in place. That keeps load behavior reproducible and makes
+diagnostics explainable.
 
-### 9.3 Copy-link affordance
+## 5. Documentation Model
 
-Every component card carries a `<button class="copy-link" data-anchor="…">`
-that the JS turns into a click-to-copy URL.
+The model layer should turn loaded schema document instances into explicit
+records. This is the central architectural boundary: renderers should consume
+records and ask indexes for relationships rather than rediscovering global
+facts ad hoc.
 
-## 10. `vc:*` rendering semantics
+Records should carry values in the form most useful to renderers:
 
-`vc:*` is the Conditional-Inclusion vocabulary defined in _XSD 1.1 Part 1_
-Appendix F. A schema author writes `<xs:foo vc:minVersion="1.1">` to declare
-that `<xs:foo>` should be skipped by 1.0 processors.
+- Human-readable authored values, such as lexical QNames and raw attribute
+  values, are preserved for display.
+- Namespace-aware keys, such as Clark names, are stored for lookup.
+- Stable IDs and anchors are computed once and reused by navigation,
+  references, diagnostics, and tests.
+- Source nodes remain available for local context, annotations, and source
+  listings, but they are not the only representation of a global fact.
 
-This stylesheet **displays** `vc:*` attributes but **does not filter** on
-them. The output is intentionally a superset of every version: each
-`vc:*`-decorated component carries:
+### 5.1 Component Records
 
-1. A `badge--vc-decorated` in its component header.
-2. A `component__vc-controls` panel listing the `vc:*` attribute(s) and their
-   values as a `<dl>`.
-3. An entry in the overview "XSD 1.1 features in use" card, which aggregates
-   every `vc:*` occurrence anywhere in the schema collection (not just at the
-   top level — but the overview card groups by component to avoid noise from
-   nested annotations).
+Every global component gets a component record:
 
-This decision means we do not need an active-version parameter and our
-output is independent of how a real processor would interpret the schema.
-The trade-off is that consumers of the documentation see all variants at
-once; this is the right default for documentation but the wrong default for
-runtime validation, and the README must be explicit about that.
-
-## 11. Error handling
-
-Two failure classes can occur in normal operation:
-
-- **`doc()` failure on an `xs:import`/`xs:include` target.** The
-  `xsl:try`/`xsl:catch` in `x:collect-schemas` records a diagnostic into
-  `$schemas?errors`. The overview "Schemas" card surfaces the failed
-  reference as a row with a red badge and the error message. The schema
-  collection continues processing remaining references.
-- **Unresolvable QName in a `@type`/`@base`/`@ref`/etc. attribute.**
-  `x:component-link` renders the literal QName text as a `<code>` with a
-  `title="referenced component not found"` attribute. The overview gains an
-  "Unresolved references" diagnostic card if any are present.
-
-No error condition aborts the run. The output always renders. The README
-documents how to surface diagnostics during CI.
-
-## 12. Security model
-
-- **Documentation HTML sanitisation.** As described in §8. The `safe` mode
-  is the default; `permissive` requires opt-in and is explicitly warned
-  about in the README and stylesheet docblock.
-- **No remote resource fetch.** The stylesheet calls `doc()` only on
-  `schemaLocation` URIs from the input. Image/script/CSS references inside
-  `xs:documentation` are emitted as `<img src="…">` / `<a href="…">` but no
-  prefetch happens at transform time.
-- **Deterministic output.** The renderer emits no timestamps, no random
-  IDs, and no host-specific paths. Synthetic IDs from the `nsid`
-  accumulator are stable across runs because the accumulator visits
-  schemas in document order.
-- **Output is single-file static HTML.** No `<script src="…">` to a third
-  party; the JS lives under `base-href` and is the consumer's
-  responsibility.
-
-## 13. Parameter surface
-
-Eight `xsl:param` declarations.
-
-| Name             | Type         | Default       | Purpose                                                                                                                     |
-| ---------------- | ------------ | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `title`          | `xs:string?` | `()`          | Page `<title>` and `<h1>`. Falls back to `xs:schema/@id`, then `"Schema: " + targetNamespace`, then `"XSD Documentation"`.  |
-| `base-href`      | `xs:string`  | `'./assets/'` | URL prefix for `xsdstyle.css` and `xsdstyle.js`.                                                                            |
-| `include-source` | `xs:boolean` | `true()`      | Emit the per-component XSD source `<details>` block.                                                                        |
-| `doc-html`       | `xs:string`  | `'safe'`      | Documentation HTML mode. `safe` (allowlist) or `permissive` (verbatim).                                                     |
-| `ui-lang`        | `xs:string`  | `'en'`        | BCP-47 tag for `<html lang="…">` and the chrome catalog lookup.                                                             |
-| `xml-lang`       | `xs:string`  | `'en'`        | BCP-47 tag emitted as a `lang="…"` fallback on XSD-prose wrappers when no per-block `@xml:lang`.                            |
-| `dir`            | `xs:string`  | `'auto'`      | Writing direction for `<html dir="…">`. `auto` infers `rtl` from `ui-lang` (ar/he/fa/ur/…), else `ltr`; or pass explicitly. |
-| `noindex`        | `xs:boolean` | `false()`     | Emit `<meta name="robots" content="noindex">`.                                                                              |
-
-No `xsd-version` parameter (see §10). No `theme` parameter (CSS variables +
-`prefers-color-scheme` handle dark mode without a stylesheet param). No
-multi-file output param (out of scope).
-
-## 14. Assets contract
-
-Two files under `assets/`:
-
-- **`xsdstyle.css`** — BEM stylesheet. CSS custom properties drive the light /
-  dark theme via `prefers-color-scheme`. Major blocks: `page-header`,
-  `layout`, `sidebar` + `sidebar__search` + `sidebar__toc`, `content`,
-  `overview` + `overview__facts` + `overview__xsd11` +
-  `overview__default-open-content` + `overview__schemas`, `components` +
-  `components--{kind}`, `component` + `component--{kind}` + `component__*`
-  for header/doc/model/attrs/open-content/type-alternatives/vc-controls/see-also/source,
-  `badge` + `badge--*` modifiers.
-- **`xsdstyle.js`** — Vanilla, no dependencies, ~100 lines. Responsibilities:
-  (a) on `DOMContentLoaded`, read `<script type="application/json" id="xsdoc-index">`
-  and build an in-memory array; (b) wire the `.sidebar__search` input to
-  filter visible TOC entries by substring against `name` and `doc-snippet`,
-  with `<mark>` highlight in the result chrome; (c) show top-N (default 10)
-  documentation-only hits in a `.sidebar__doc-matches` block under the TOC;
-  (d) wire `.copy-link` buttons to copy `location.href + "#" + data-anchor`;
-  (e) wire `.expand-all` / `.collapse-all` toggles to set every
-  `<details open>` simultaneously; (f) keyboard shortcuts: `/` focuses the
-  filter, `Esc` clears it.
-
-The stylesheet emits `<link rel="stylesheet" href="{$base-href}xsdstyle.css">`
-and `<script src="{$base-href}xsdstyle.js" defer></script>`. The action's
-`entrypoint.sh` and the README's "Manual usage" example are responsible for
-copying `assets/` next to the generated HTML.
-
-## 15. Testing strategy
-
-### 15.1 Layout
-
-```
-test/
-├── xsdstyle.xspec   # XSpec unit tests for pure functions (55 scenarios)
-└── fixtures/
-    ├── xsd11-base.xsd
-    ├── xsd11-features.xsd
-    ├── open-content.xsd
-    ├── inheritable.xsd
-    └── vc-features.xsd
+```xquery
+map {
+  'id': xs:string,
+  'kind': 'element' | 'attribute' | 'complexType' | 'simpleType'
+        | 'attributeGroup' | 'group' | 'notation',
+  'node': element(),
+  'name': xs:string,
+  'qname': xs:QName,
+  'clark': xs:string,
+  'document-id': xs:string,
+  'effective-target-namespace': xs:string,
+  'anchor': xs:string,
+  'disposition': 'normal' | 'redefined' | 'overridden',
+  'versioning-attributes': attribute()*,
+  'versioning-records': map(*)*,
+  'documentation-text': xs:string,
+  'source-order': xs:integer
+}
 ```
 
-`xsdstyle.xspec` uses the standard XSpec pattern (nested `x:scenario`
-with `x:call function="f:…"` and `x:expect select="…"`). End-to-end
-verification — does the stylesheet produce valid HTML against a real
-schema? — lives in `make smoke-test`, which renders the W3C XSD-of-XSDs
-and validates the output with vnu.jar.
+Components declared inside `xs:redefine` and `xs:override` are records in their
+own right and must be visibly marked. Their anchors must be stable and must not
+collide with the component they redefine or override.
 
-### 15.2 TDD order
+The containers constrain what can appear inside them: `xs:redefine` may contain
+only simple type, complex type, model group, and attribute group definitions;
+`xs:override` may additionally contain element, attribute, and notation
+declarations. The "unknown XSD namespace element in a schema position"
+diagnostic fires only for local names outside the XSD vocabulary; a known
+element misplaced in a container (for example `xs:element` inside
+`xs:redefine`) is not separately diagnosed — the generator is a documentation
+renderer, not a validator, and leaves structural validity to schema
+processors.
 
-1. **Pure helpers first** (cheap, drive design): `x:clark`, `x:resolve-qname`,
-   `x:occurs`, `x:occurs-title`, `x:format-notQName`, `x:safe-href`,
-   `x:xsd-true`, `x:vc-attrs`, `x:is-redefined`, `x:is-overridden`,
-   `x:abbr`, `x:is-xs`, `x:anchor`.
-2. **Schema-aware helpers** (`x:effective-open-content`, `x:inheritable-attrs`,
-   `x:collect-schemas`) are exercised end-to-end via `make smoke-test` because
-   they require a real schema context.
+The canonical component ordering is:
 
-### 15.3 Fixture coverage
+1. Elements
+2. Complex types
+3. Simple types
+4. Attributes
+5. Attribute groups
+6. Model groups
+7. Notations
 
-The original `test/fixtures/xsd11-features.xsd` covers most of XSD 1.1 but
-lacks `openContent`, multi-attribute `@inheritable`, and the full `vc:*`
-attribute set. Three new fixtures fill the gap and live alongside the
-originals in `test/fixtures/`:
+Within each kind, order by effective namespace, then alphabetically by name
+(case-insensitive primary key, case-sensitive secondary key), with source
+order as the final deterministic tiebreak. This matches the specification's
+§7.3 ordering rule and applies to both the navigation and the main component
+sections.
 
-- `open-content.xsd` — own + default + mode="none" + inherited open content.
-- `inheritable.xsd` — `@inheritable` on a base type, with a CTA element in
-  a derived type to exercise inherited test-context surfacing.
-- `vc-features.xsd` — every `vc:*` attribute (`minVersion`, `maxVersion`,
-  `typeAvailable`/`Unavailable`, `facetAvailable`/`Unavailable`).
+### 5.2 Contextual Records
 
-### 15.4 Makefile
+Contextual constructs do not all need top-level sections, but they should still
+be represented consistently:
 
-`make test` runs every `test/*.xspec` via XSpec; `make smoke-test` renders
-the W3C XSD-of-XSDs end-to-end and validates the HTML/CSS with vnu.jar.
-Both should pass on every commit.
+- Annotation and appinfo blocks.
+- Local element and attribute declarations.
+- Particles and model groups.
+- Wildcards.
+- Identity constraints.
+- Type alternatives.
+- Assertions and assertion facets.
+- Open content and default open content.
+- Attribute uses and attribute-group expansions.
+- Facets.
+- Versioning annotations.
 
-## 16. Open questions and known risks
+These records should carry their nearest owning component ID where one exists.
+This lets feature summaries and diagnostics group nested facts under useful
+headings rather than producing a flat list.
 
-These are documented here so they don't get lost in a chat history. They
-should be revisited at the end of the implementation phase.
+Contextual record payloads should preserve authored details needed for
+structured rendering, including:
 
-1. **`xs:override` chain depth.** Capped at one level (per the user's scope
-   decision). A cycle guard is still required because override loops are
-   spec-illegal but cheap to detect, and we'd rather report than infinite-
-   loop on a malformed schema.
-2. **CTA inherited-context display.** The renderer shows inheritable
-   attributes from the _direct enclosing_ element type. If a deeper
-   ancestor in the document tree also contributes, a "see ancestor types"
-   link is emitted but the recursive walk is not done. This bounds output
-   size; revisit if real-world schemas need transitive context.
-3. **`vc:*` in nested positions.** `vc:*` is allowed on any XSD-namespace
-   element. Component-level badges and panels reflect both top-level and
-   nested usage. The overview "XSD 1.1 features in use" card aggregates by
-   the _innermost named ancestor component_ to keep the list readable.
-4. **JSON search-index snippet length.** Truncates documentation
-   snippets to 240 chars.
-5. **XSpec snapshot brittleness.** Integration tests assert narrow
-   `x:context` selectors, not full-document equality. Negative assertions
-   (e.g. "no open-content panel emitted for this component") use `count(...)=0`.
-6. **Saxon-HE 13 vs older Saxon.** The Makefile and Dockerfile pin
-   Saxon-HE 13. The new stylesheet's XSLT 3.0 idiom set is a strict subset
-   of Saxon-HE 13's capabilities, but we should verify that
-   `xsl:try`/`xsl:catch` and `xsl:iterate` are both available without
-   licensed Saxon-EE (they are, per the Saxonica docs, but a CI smoke
-   test against the Maven Central jar in `.tools/` is wise).
+- Wildcard namespace constraints, `@notNamespace`, `@notQName`,
+  `@processContents`, occurrence range for `xs:any`, annotation, and whether
+  the wildcard admits elements, attributes, or both.
+- Wildcard token classification for `##any`, `##other`, `##local`,
+  `##targetNamespace`, `##defined`, and `##definedSibling`. Classification
+  must respect token placement: `##any` and `##other` appear only in
+  `@namespace`; `##defined` and `##definedSibling` appear only in `@notQName`;
+  and `##definedSibling` is valid only on element wildcards (`xs:any`).
+  Labels therefore depend on both the carrying attribute and the wildcard
+  kind.
+- Wildcard provenance: direct declaration, open content, default open
+  content, or attribute group. (A base-type origin cannot occur in the
+  source-honest rendering model: a wildcard inherited from a base type
+  renders in the declaring type's own section as direct content.)
+- Facet `@value`, `@fixed`, `@id`, annotation, source position or context, and
+  whether the facet is XSD 1.1-only.
+- Type-alternative source order, `@test`, default-alternative state,
+  `@xpathDefaultNamespace`, selected type, inline type, annotation, and CTA
+  inheritable-attribute context. Each inheritable attribute in that context
+  must record whether it is inherited from an ancestor type or declared on the
+  current type, because attributes declared on the current type are not
+  inherited into that type's own test context.
+- Assertion `@test`, `@xpathDefaultNamespace`, optional message or annotation,
+  and owning type or facet context.
+- Open-content mode, wildcard, explicit versus effective origin, and
+  `@appliesToEmpty` where represented. Mode values are constrained by origin:
+  `none` is allowed only on `xs:openContent`, while `xs:defaultOpenContent`
+  permits only `interleave` and `suffix`.
+- Versioning attribute exact QName and value, the XSD element carrying it, the
+  nearest owning schema component, and whether it came from schema-level or
+  nested content.
+
+### 5.3 Reference Records
+
+Every QName-valued reference should become a reference record:
+
+```xquery
+map {
+  'id': xs:string,
+  'source-node': element(),
+  'source-attribute': xs:string,
+  'lexical-value': xs:string,
+  'resolved-qname': xs:QName?,
+  'clark': xs:string?,
+  'expected-kind': xs:string,
+  'owner-component-id': xs:string?,
+  'state': 'resolved' | 'builtin' | 'external' | 'unresolved',
+  'target-component-id': xs:string?,
+  'diagnostic-id': xs:string?
+}
+```
+
+List-valued QName attributes — `@memberTypes` and the XSD 1.1 multi-head
+`@substitutionGroup` — produce one reference record per token, each resolved
+and displayed independently.
+
+This architecture avoids mixing link creation with QName resolution. The model
+decides what a reference means; the renderer decides how to display each state.
+
+Renderers must keep the reference states visually and programmatically
+distinct. The four model states map onto the specification's three display
+states: `resolved` renders as an internal link, `builtin` as an external W3C
+specification link, and `external` and `unresolved` both render as visible
+non-links distinguished by whether the namespace is known:
+
+- Internal resolved links point to generated anchors.
+- Built-in or specification links point to external W3C sections.
+- External references identify known namespaces outside the loaded collection.
+- Unresolved references remain visible and must expose diagnostic context to
+  keyboard and assistive-technology users, for example by being focusable or by
+  using labelled diagnostic text.
+
+Reference records should be the only place that classifies a QName reference
+as resolved, built-in, external, or unresolved. Renderers may format those
+states differently, but they should not repeat namespace lookup logic or invent
+new states locally.
+
+## 6. QName and Namespace Resolution
+
+QName resolution must be namespace-aware and context-sensitive.
+
+The resolver should accept:
+
+- The lexical QName value.
+- The source element carrying the attribute.
+- The expected component kind.
+- The nearest schema document instance.
+
+It should return a reference record, not only an `xs:QName`.
+
+For prefixed values, use the lexical namespace binding at the source element.
+For unprefixed values, first try the effective target namespace of the owning
+schema document when a same-named component of the expected kind exists there.
+If no such component exists, fall back to normal lexical `resolve-QName()`.
+
+This explicit same-target-namespace preference matches common XSD authoring
+practice where `xmlns` on `xs:schema` is the XSD namespace but unprefixed
+references are intended to name schema components in the target namespace.
+
+Unresolved references must remain visible in output and must create diagnostics.
+They must not be guessed away.
+
+## 7. Indexes and Relationship Graphs
+
+Indexes should be built after the component and reference records exist.
+
+The stylesheet prebuilds six reverse-reference maps, once, in the shell
+template. Keys are the Clark name of the referenced component; values are the
+referencing nodes in document order:
+
+| Index                      | Key                         | Value                                                    |
+| -------------------------- | --------------------------- | -------------------------------------------------------- |
+| Type users                 | type Clark QName            | Nodes carrying `@type`, `@base`, or `@itemType` matches. |
+| Keyrefs by referenced key  | key/unique Clark QName      | `xs:keyref` nodes whose `@refer` resolves to the key.    |
+| Element references         | element Clark QName         | `xs:element[@ref]` nodes.                                |
+| Group references           | group Clark QName           | `xs:group[@ref]` nodes.                                  |
+| Attribute-group references | attribute-group Clark QName | `xs:attributeGroup[@ref]` nodes.                         |
+| Attribute references       | attribute Clark QName       | `xs:attribute[@ref]` nodes.                              |
+
+Every other relationship lookup (component matching, identity-constraint
+targets, substitution members and heads, wildcard and facet facts, versioning
+owners) is computed per component from the schema nodes; the indexes exist
+where a per-component scan would otherwise be repeated across the whole page.
+
+When adding a relationship, first decide whether it is a global relationship
+that many components will query or a local detail rendered only from an owning
+component. Global relationships belong in records or indexes. Local details can
+stay in the relevant renderer when doing so preserves source order and does not
+duplicate work across the page.
+
+Indexes should be derived data. A stale or partial index is worse than a local
+scan, so each index must document its key, value, ordering, and source records.
+When the source records change, the index construction and tests should change
+in the same patch.
+
+Cycle-prone expansions must carry a visited set:
+
+- Model group expansion.
+- Attribute group expansion.
+- Type derivation chains.
+- Substitution group head chains.
+- Schema collection traversal.
+
+When a cycle is detected, stop expansion, render the reference that caused it,
+and emit a diagnostic such as "not expanded: recursive group reference".
+
+## 8. Rendering Pipeline
+
+The root template should be thin. It should assemble the page skeleton and then
+delegate to rendering modes that consume the model.
+
+Recommended pipeline:
+
+```text
+initial xs:schema document
+  -> normalized configuration
+  -> schema collection records
+  -> component/context/reference records
+  -> indexes and diagnostics
+  -> HTML skeleton
+  -> overview
+  -> navigation
+  -> component sections
+  -> diagnostics
+  -> optional source fragments
+  -> i18n/runtime data for progressive enhancement
+```
+
+The HTML must contain all schema facts without JavaScript. JavaScript may
+filter, reveal, copy links, toggle themes, and update status text, but it must
+derive schema content from the rendered DOM.
+
+Rendering modes should preserve accessibility as an output property, not only a
+visual concern. Tables need captions or labelled headings and useful `th`
+scopes. Navigation, filters, icon-only buttons, copy-link controls, theme
+controls, and disclosure controls need accessible names. JavaScript-updated
+counts or status messages should use a live region or equivalent discoverable
+text. Filtering must not trap focus in hidden content, and focus indicators
+must remain visible.
+
+Rendering should be deterministic. Avoid renderer-local calls that depend on
+the current time, host filesystem paths, processor-generated IDs, or map
+iteration order. If a renderer needs an ID, label, sort key, or diagnostic
+anchor, prefer computing it in the model or index phase and passing it through.
+
+## 9. Page Structure
+
+The generated page should use this high-level structure:
+
+```html
+<html lang="..." dir="...">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="generator" content="..." />
+    <!-- robots noindex meta only when requested -->
+    <title>...</title>
+    <script>
+      <!-- inline theme bootstrap -->
+    </script>
+    <link rel="stylesheet" href="..." />
+    <script src="..." defer="defer"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">...</a>
+    <header>...</header>
+    <nav aria-label="...">...</nav>
+    <main id="main">
+      <section id="overview">...</section>
+      <section id="kind-el">...</section>
+      <section id="kind-ct">...</section>
+      <section id="kind-st">...</section>
+      <section id="kind-at">...</section>
+      <section id="kind-ag">...</section>
+      <section id="kind-gr">...</section>
+      <section id="kind-no">...</section>
+      <section id="diagnostics">...</section>
+    </main>
+  </body>
+</html>
+```
+
+The head carries the generator, viewport, and color-scheme metadata required by
+the specification, plus the robots meta tag when `robots-noindex` is true. The
+tiny inline theme-bootstrap script is a deliberate exception to the single
+deferred script: it must run before first paint to avoid a theme flash, and it
+does nothing except apply a stored theme preference to the root element. All
+other behavior lives in the deferred script.
+
+The diagnostics section may be omitted only when there are no diagnostics.
+Every diagnostic should also be reachable from the relevant overview or
+component context.
+
+Component anchors should use the deterministic shape:
+
+```text
+{kind-abbreviation}-{namespace-id}-{local-name}
+```
+
+The abbreviations are `el`, `ct`, `st`, `at`, `ag`, `gr`, and `no` for
+element, complex type, simple type, attribute, attribute group, model group,
+and notation. The primary namespace may use an empty namespace ID; secondary
+namespaces use `ns1`, `ns2`, and so on in first-seen schema-collection order.
+A namespace referenced but never collected gets a deterministic
+`nsx-{sanitized-uri}` ID. Redefined and overridden components append the
+deterministic suffixes `-redefined` and `-overridden`; those are the only
+collision suffixes at the component level (two same-kind, same-namespace,
+same-name components outside redefine/override are invalid schemas and get
+identical anchors).
+
+Nested linkable constructs use two schemes, both page-unique and
+deterministic without processor-generated IDs:
+
+- Identity constraints: `{owner-anchor}-{k|kr|u}-{name}` where the middle
+  token abbreviates key/keyref/unique. A ref-only constraint (XSD 1.1 `@ref`,
+  no `@name`) uses `ref-{sanitized-ref}` as its name part, with a
+  sibling-count suffix when identical ref-only siblings would collide.
+- Other nested constructs (type alternatives, inline types, local elements):
+  the enclosing top-level component's anchor plus the construct's
+  sibling-position path inside that component.
+
+## 10. Component Rendering
+
+Component renderers should share a common shell:
+
+- Stable `id`.
+- Heading with kind, name, and namespace.
+- Badges for state such as abstract, mixed, nillable, redefined, overridden,
+  XSD 1.1 feature, and versioning annotations.
+- Defined-in document link or label.
+- Annotation/documentation blocks.
+- Kind-specific facts.
+- See-also/backlink section.
+- Optional source fragment.
+
+Kind-specific renderers then fill the body:
+
+| Kind            | Required renderer focus                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Element         | Type, references, value constraints, occurrence for local use, substitution groups, identity constraints, type alternatives. |
+| Attribute       | Type, use, value constraints, form, inheritable, local/global context.                                                       |
+| Complex type    | Derivation, content model, attributes, assertions, open content, default attributes, hierarchy.                              |
+| Simple type     | Variety, restriction/list/union, facets, built-in datatype links, NOTATION enumerations.                                     |
+| Attribute group | Attribute uses, nested group references, wildcard, users.                                                                    |
+| Model group     | `all`, `choice`, `sequence`, particles, references, users.                                                                   |
+| Notation        | Public/system identifiers and NOTATION enumeration links.                                                                    |
+
+Local and anonymous constructs should render inline where they occur. They do
+not receive top-level component sections in the current page contract.
+
+Complex-type rendering must compute effective open content with the product
+display rule: a type's own `xs:openContent` wins; otherwise schema-level
+`xs:defaultOpenContent` applies only to complex-content types, and applies to
+empty complex types only when `@appliesToEmpty` is true. Simple-content types
+must not be shown as receiving effective open content.
+
+Default-attribute rendering must link schema-level `@defaultAttributes` to the
+referenced attribute group when resolvable and show, for each complex type,
+whether defaults apply after considering `@defaultAttributesApply`.
+
+Attribute tables decide their conditional columns (Inheritable, Documentation)
+once per table: `f:attribute-table-nodes` collects the attribute and wildcard
+nodes the table will show by mirroring the row-emission walk exactly —
+descendant axis on the owner, child axis inside referenced attribute groups,
+and the same ambiguity and visited-set stops as the row expansion — so a column
+is emitted iff some row will populate it. The Documentation decision reuses
+`f:annotation-renders`, the same predicate the documentation renderer uses to
+decide whether an annotation emits anything (non-whitespace text, element
+children, a usable `@source` link, or appinfo).
+
+Simple-type rendering must preserve repeated facets and show facet `@id`,
+`@fixed`, annotations, and source context where available. Built-in datatype
+links should cover the XSD 1.1 catalog, and XSD 1.1-only built-ins and facets
+such as `xs:dateTimeStamp`, `xs:yearMonthDuration`, `xs:dayTimeDuration`, and
+`xs:explicitTimezone` should receive an XSD 1.1 marker when they occur.
+
+Repeated pattern facets have combination semantics the rendering must respect:
+multiple `xs:pattern` facets within one restriction step combine with OR, while
+pattern facets across derivation steps combine with AND. Same-step patterns
+must not be presented as independent conjoint constraints.
+
+The Configuration layer should carry a static fundamental-facet catalog for
+built-in types — ordered, bounded, cardinality, and numeric — alongside the
+datatype link catalog, so simple-type rendering can expose fundamental facet
+information when it is known.
+
+Type-alternative rendering should surface the inherited-versus-declared
+distinction recorded in the CTA context (section 5.2): attributes declared on
+the current type are not available to that type's own test context, only to
+derived or descendant contexts.
+
+Wildcard rendering must display `@namespace`, `@notNamespace`, `@notQName`,
+`@processContents`, all recognized wildcard tokens, annotations, occurrence
+range for `xs:any`, whether the wildcard admits elements or attributes, and
+whether it was introduced directly, through open content, through default
+open content, or through an attribute group (base-type introduction renders
+in the declaring type's own section).
+
+Versioning rendering must cover `vc:minVersion`, `vc:maxVersion`,
+`vc:typeAvailable`, `vc:typeUnavailable`, `vc:facetAvailable`, and
+`vc:facetUnavailable`. A versioning panel should show the exact attribute name
+and value, the XSD element carrying it, and the nearest owning schema
+component. The output should explain that documentation displays the source and
+does not apply conditional inclusion filtering by default.
+
+## 11. Overview Rendering
+
+The overview is the reader's map of the schema collection. It should include:
+
+- Primary document URI when available.
+- Target namespace and schema metadata.
+- Effective namespace summary for every loaded schema document.
+- Composition table for imports, includes, redefines, and overrides.
+- Load, cycle, and unresolved-reference diagnostics.
+- XSD 1.0 and XSD 1.1 feature summaries.
+- Schema-level annotations, default attributes, and default open content.
+
+The overview should distinguish declared target namespace from effective target
+namespace for chameleon includes.
+
+Schema metadata should be explicit, not a catch-all label. Render `@version`,
+`@id`, `@xml:lang`, `@elementFormDefault`, `@attributeFormDefault`,
+`@blockDefault`, `@finalDefault`, `@xpathDefaultNamespace`,
+`@defaultAttributes`, and `@defaultAttributesApply` where present.
+
+The XSD 1.1 feature summary should include grouped versioning annotations and
+should not flatten nested `vc:*` attributes into a noisy global list.
+
+## 12. Diagnostics
+
+Diagnostics should be records, not formatted strings until rendering time.
+The stylesheet uses two record shapes. Collection diagnostics carry the
+offending node:
+
+```xquery
+map {
+  'code': xs:string,
+  'severity': 'info' | 'warning',
+  'node': node()
+}
+```
+
+Parameter diagnostics carry the parameter facts needed for the context
+sentence:
+
+```xquery
+map {
+  'code': 'invalid-parameter',
+  'severity': 'info',
+  'param': xs:string,
+  'value': xs:string,
+  'normalized': xs:string
+}
+```
+
+The unresolved-reference, unknown-element, and recursive-expansion categories
+are derived directly from the scanned attribute and element nodes rather than
+materialized as records; their list ids (`diag-unresolved-{n}`,
+`diag-unknown-{n}`, `diag-recursive-{n}`) come from position in the
+deterministic scan.
+
+Minimum diagnostic categories:
+
+- Schema document not loaded.
+- Loaded document is not an `xs:schema`.
+- Schema traversal skipped a cycle or duplicate instance.
+- QName reference not resolved.
+- Recursive group or attribute-group expansion stopped.
+- Unknown XSD namespace element in a schema position.
+- Invalid parameter value normalized to a default.
+
+Diagnostics are documentation facts, not validation errors. Wording should use
+"not loaded", "not resolved", "not expanded", or "not recognized".
+
+Diagnostic IDs should be stable for unchanged input. If a diagnostic is linked
+from an unresolved reference, overview row, or component article, the link
+target must be generated by the same deterministic scan that produced the
+diagnostic list entry.
+
+## 13. Source Rendering
+
+Source rendering should be an isolated mode. It should receive a source node
+and output escaped, readable XML.
+
+Requirements:
+
+- Preserve element and attribute names.
+- Preserve attributes, and re-declare on the fragment root the namespace
+  declarations the fragment uses. A prefix counts as used when the emitter
+  picks it for an element or attribute name inside the fragment, or when it
+  appears as a QName-shaped token in an attribute value; unused in-scope
+  prefixed declarations are omitted, and the default namespace declaration is
+  always kept. (Declarations made on descendants of the fragment root are not
+  re-emitted — a pre-existing limitation unchanged by pruning.)
+- Preserve meaningful annotation text.
+- Keep source blocks textual and selectable.
+- Wrap global component source in `details`.
+- May wrap schema-level composition declarations in `details` when useful.
+- Respect `show-source`.
+- Use syntax highlighting only as presentation; the textual XML remains the
+  carrier of source facts.
+
+Source rendering must not be used as a substitute for structured rendering.
+All important schema facts must be available outside the source listing.
+
+## 14. Documentation Markup
+
+`xs:documentation` and `xs:appinfo` are untrusted input.
+
+The safe documentation renderer should:
+
+- Promote only no-namespace or XHTML elements from an allowlist.
+- Drop executable elements and event-handler attributes.
+- Reject dangerous URL schemes after trimming whitespace and control
+  characters.
+- Add `rel="external noopener noreferrer"` to promoted links that open a new
+  browsing context.
+- Prevent schema-authored IDs from colliding with generated anchors.
+- Render unsupported elements by preserving text content.
+- Avoid `img`; safe mode has no schema-authored image policy.
+
+The permissive renderer may copy content verbatim, but the generated page and
+documentation should identify this mode as unsafe for untrusted schemas.
+
+`xs:appinfo` should render as source-like structured content and must never be
+executed.
+
+## 15. Internationalization and Direction
+
+All generated UI text should flow through a message catalog. Schema-authored
+names, QNames, namespace URIs, XPath expressions, regexes, facet values, and
+source code must not be translated.
+
+The lookup chain is:
+
+1. Exact `interface-language`.
+2. Primary language subtag.
+3. English.
+4. Visible missing-key marker during development.
+
+`documentation-language` applies only to schema-authored prose wrappers that do
+not carry `xml:lang`.
+
+`interface-direction=auto` should infer direction from the interface language.
+Code-like schema content should render left-to-right or in bidi-isolating
+elements even when the interface is right-to-left.
+
+Documentation wrappers should preserve author-supplied `xml:lang`. When a
+documentation block has no `xml:lang`, the wrapper should use
+`documentation-language`. `xs:appinfo` and source listings should not be
+assigned prose language unless the source explicitly supplies one.
+
+Generated chrome that a user can see or interact with should use the message
+catalog, including table captions and columns, badge text, button labels,
+`aria-label` values, filter placeholders, runtime status strings, copy-link
+feedback, theme labels, and diagnostic headings.
+
+## 16. Assets and Progressive Enhancement
+
+The default asset contract is:
+
+- `${asset-base-uri}xsdstyle.css`
+- `${asset-base-uri}xsdstyle.js`
+
+Icon SVGs are read at transform time and inlined once into the page as a
+hidden `symbol` sprite, so icons require no runtime image fetches and the page
+stays a single document. The only other script content is the inline
+theme-bootstrap exception described in section 9.
+
+The stylesheet should render useful HTML without either asset. CSS improves
+presentation. JavaScript may add:
+
+- Navigation filtering.
+- Copy-link controls.
+- Expand/collapse all.
+- Theme preference layered over `prefers-color-scheme`.
+- Live result counts and status messages.
+
+JavaScript should not require dependencies and should not fetch schema data.
+When it needs runtime strings, the XSLT may embed a small JSON message block.
+The search index should be derived from rendered DOM content so the DOM remains
+the source of truth.
+
+CSS must preserve contrast in light and dark color schemes and must not rely on
+hue alone to distinguish component kinds, warnings, unresolved references, or
+versioning features. Source, QName, namespace URI, XPath, regex, and code-like
+values should remain left-to-right or bidi-isolated under RTL page chrome.
+
+## 17. Determinism
+
+Determinism is a system property. The architecture should avoid dependencies
+on processor-specific node ordering beyond document order.
+
+Rules:
+
+- Sort schema collection work queues deterministically when multiple outgoing
+  edges are discovered at the same location.
+- Assign schema document IDs in collection order.
+- Assign namespace IDs in first-seen collection order.
+- Generate anchors from the specified kind abbreviation, namespace ID, local
+  name, and deterministic suffixes for collisions.
+- Keep diagnostics in fixed category buckets — parameter, collection,
+  unknown-element, recursive-expansion, unresolved-reference — with document
+  order inside each bucket.
+- Relativize local source URIs against the primary schema directory when
+  displaying paths, so host-specific absolute paths do not leak into normal
+  output.
+
+## 18. Testing Architecture
+
+Tests should assert the visible HTML contract, not only helper behavior.
+
+The concrete harness is XSpec on Saxon-HE, run through `make test` with the
+tooling vendored under `.tools/`. The existing suites map onto the layers
+below: `helpers.xspec` and `parameters.xspec` cover unit behavior;
+`references.xspec`, `relationships.xspec`, and `diagnostics.xspec` cover
+integration behavior; `dom.xspec`, `xsd11.xspec`, and `i18n.xspec` cover the
+generated page contract.
+
+Recommended layers:
+
+- XSpec unit tests for QName resolution, anchor generation, occurrence
+  formatting, safe-link filtering, datatype/facet link catalogs, and parameter
+  normalization.
+- XSpec integration tests for collection traversal, chameleon includes,
+  failed loads, cyclic group expansion, and reference states.
+- Golden or structural HTML tests for representative schemas covering each
+  global component kind and each XSD 1.1 feature.
+- Browser or DOM tests for no-JavaScript usability, keyboard-visible controls,
+  accessible names, table headings, filtering behavior, copy-link status,
+  status live-region behavior, contrast-sensitive states, and theme toggling.
+- Determinism tests that render the same input twice and compare normalized
+  output.
+
+Every public parameter in the specification should have direct test coverage.
+Coverage should also assert the exact anchor shape, reference-state rendering,
+effective open-content/default-attribute rules, wildcard tokens and negative
+constraints, versioning panels, XSD 1.1 datatype/facet markers, and optional
+source fragments for composition declarations.
+
+The suite must also include the specification's end-to-end renders, each with
+its own fixture:
+
+- A compact schema exercising every XSD 1.0 component family.
+- A compact schema exercising the XSD 1.1-only features.
+- A multi-document collection with include, import, redefine, override,
+  chameleon include, and at least one missing reference.
+- A substantial real-world or standards schema large enough to expose
+  performance, navigation, and HTML-validity problems.
+
+Each end-to-end render is gated on: valid HTML (the Nu validator is vendored
+at `.tools/vnu.jar`), required local assets present, no broken same-document
+component links, and completion without non-termination on cyclic input.
+
+## 19. Known Limitations
+
+`xsdstyle.xsl` currently diverges from the target architecture in the following
+ways. These are not product exceptions; they are implementation gaps to close
+without weakening `docs/specification.md`.
+
+- Chameleon effective namespaces are applied for `xs:include` and
+  `xs:redefine` but not for `xs:override` (section 4).
+- Schema-record lookup from a node keys on document URI alone, so a
+  chameleon document included under two effective namespaces resolves to the
+  first collected instance rather than the per-instance document records with
+  their own IDs described in section 4.
+- The collection walk only follows composition declarations that carry
+  `schemaLocation` and records only loaded documents; load failures and
+  no-`schemaLocation` imports are reconstructed by a separate diagnostics
+  replay of the walk, rather than being captured by the per-edge status
+  records of section 4.
+- Reference resolution happens inside each reverse index rather than
+  producing the centralized reference records of section 5.3, so reference
+  states and diagnostics are not derived from one shared model. The
+  unresolved-reference scan is a single shared function feeding both the
+  diagnostics list and the `aria-describedby` wiring on unresolved markers.
+- The four end-to-end fixtures and their validation gates (section 18) are
+  not implemented.
+
+When a limitation is fixed, remove or amend the corresponding bullet in this
+section in the same change. Do not leave solved gaps documented as active
+constraints.

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="../xsdstyle.xsl" run-as="external">
+  <x:scenario label="QName references">
+    <x:scenario label="unprefixed same-target reference resolves before lexical default namespace">
+      <x:context>
+        <schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:example">
+          <complexType name="Book" />
+          <element name="BookElement" type="Book" />
+        </schema>
+      </x:context>
+      <x:expect
+        label="Book links to the user-defined complex type"
+        test="exists($x:result//article[@id eq 'el-BookElement']//a[@class eq 'xref xref--int'][@href eq '#ct-Book'])
+          and empty($x:result//article[@id eq 'el-BookElement']//a[@href eq 'https://www.w3.org/TR/xmlschema11-2/#Book'])" />
+    </x:scenario>
+
+    <x:scenario label="unprefixed reference falls back to lexical default namespace">
+      <x:context>
+        <schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:example">
+          <element name="Text" type="string" />
+        </schema>
+      </x:context>
+      <x:expect
+        label="string resolves to the XSD built-in type"
+        test="exists($x:result//article[@id eq 'el-Text']//a[@class eq 'xref xref--ext xref--builtin'][@href eq 'https://www.w3.org/TR/xmlschema11-2/#string'])" />
+    </x:scenario>
+
+    <x:scenario label="prefixed references resolve through their namespace binding">
+      <x:context>
+        <schema xmlns="http://www.w3.org/2001/XMLSchema" xmlns:e="urn:example" targetNamespace="urn:example">
+          <complexType name="Book" />
+          <element name="BookElement" type="e:Book" />
+        </schema>
+      </x:context>
+      <x:expect
+        label="prefixed QName links internally"
+        test="exists($x:result//article[@id eq 'el-BookElement']//a[@class eq 'xref xref--int'][@href eq '#ct-Book'])" />
+    </x:scenario>
+
+    <x:scenario label="external namespace references are visible but not guessed">
+      <x:context>
+        <schema xmlns="http://www.w3.org/2001/XMLSchema" xmlns:remote="urn:remote" targetNamespace="urn:example">
+          <element name="Remote" type="remote:Thing" />
+        </schema>
+      </x:context>
+      <x:expect
+        label="external reference state is distinct and keyboard-discoverable"
+        test="exists($x:result//article[@id eq 'el-Remote']//span[@class eq 'xref xref--external'][. eq 'remote:Thing'][@tabindex eq '0'][@title])
+          and empty($x:result//section[@id eq 'diagnostics'])" />
+    </x:scenario>
+
+    <x:scenario label="unresolved no-namespace references create diagnostics">
+      <x:context>
+        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:example">
+          <xs:element name="Broken" type="Missing" />
+        </xs:schema>
+      </x:context>
+      <x:expect
+        label="unresolved reference marker is focusable and described by its diagnostic"
+        test="exists($x:result//article[@id eq 'el-Broken']//span[@class eq 'xref xref--unresolved'][. eq 'Missing'][@tabindex eq '0'][@title])
+          and exists($x:result//section[@id eq 'diagnostics']//li[@data-code eq 'qname-unresolved'])
+          and exists($x:result//section[@id eq 'diagnostics']//code[. eq '@type'])
+          and $x:result//article[@id eq 'el-Broken']//span[@class eq 'xref xref--unresolved']/@aria-describedby
+            = $x:result//section[@id eq 'diagnostics']//li[@data-code eq 'qname-unresolved']/@id" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

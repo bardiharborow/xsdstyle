@@ -21,19 +21,19 @@ Linux runners (`ubuntu-latest`, `ubuntu-24.04`, etc.).
 
 ### Action inputs
 
-| Name             | Required | Default      | Description                                                                                                                                           |
-| ---------------- | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `xsd-file`       | yes      | —            | Path to the input `.xsd` file, relative to the workspace.                                                                                             |
-| `output-dir`     | no       | `out`        | Directory the generated site is written into.                                                                                                         |
-| `output-html`    | no       | `index.html` | Filename for the generated HTML page, inside `output-dir`.                                                                                            |
-| `title`          | no       | (see below)  | Page title.                                                                                                                                           |
-| `base-href`      | no       | `./assets/`  | URL prefix for `xsdstyle.css` and `xsdstyle.js`.                                                                                                      |
-| `include-source` | no       | `true`       | Embed the raw XSD source per component.                                                                                                               |
-| `doc-html`       | no       | `safe`       | How to render HTML inside `xs:documentation` (`safe` or `permissive`).                                                                                |
-| `ui-lang`        | no       | `en`         | BCP 47 language tag for the UI chrome. Drives `<html lang="…">` and the chrome translation lookup.                                                    |
-| `xml-lang`       | no       | `en`         | BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on documentation wrappers when the XSD block has no per-block `xml:lang`. |
-| `dir`            | no       | `auto`       | Writing direction for `<html dir="…">`. `auto` infers `rtl` from `ui-lang`; or `ltr`/`rtl` explicit.                                                  |
-| `noindex`        | no       | `false`      | Emit `<meta name="robots" content="noindex">` in the generated page.                                                                                  |
+| Name                     | Required | Default      | Description                                                                                                                                           |
+| ------------------------ | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xsd-file`               | yes      | —            | Path to the input `.xsd` file, relative to the workspace.                                                                                             |
+| `output-dir`             | no       | `out`        | Directory the generated site is written into.                                                                                                         |
+| `output-html`            | no       | `index.html` | Filename for the generated HTML page, inside `output-dir`.                                                                                            |
+| `page-title`             | no       | (see below)  | Page title.                                                                                                                                           |
+| `asset-base-uri`         | no       | `./assets/`  | URL prefix for `xsdstyle.css` and `xsdstyle.js`.                                                                                                      |
+| `show-source`            | no       | `true`       | Embed the raw XSD source per component.                                                                                                               |
+| `documentation-markup`   | no       | `safe`       | How to render HTML inside `xs:documentation` (`safe` or `permissive`).                                                                                |
+| `interface-language`     | no       | `en`         | BCP 47 language tag for the UI chrome. Drives `<html lang="…">` and the chrome translation lookup.                                                    |
+| `documentation-language` | no       | `en`         | BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on documentation wrappers when the XSD block has no per-block `xml:lang`. |
+| `interface-direction`    | no       | `auto`       | Writing direction for `<html dir="…">`. `auto` infers `rtl` from `interface-language`; or `ltr`/`rtl` explicit.                                       |
+| `robots-noindex`         | no       | `false`      | Emit `<meta name="robots" content="noindex">` in the generated page.                                                                                  |
 
 See [Parameters](#parameters) for the semantics of each one.
 
@@ -63,14 +63,14 @@ cp -R assets out/assets
 
 Override with `-param:name=value` on the Saxon command line.
 
-- **`title`** (string) — Page title. Defaults to `@id`, then `Schema: {targetNamespace}`, then `XSD Documentation`.
-- **`base-href`** (string, default `./assets/`) — URL prefix for `xsdstyle.css` and `xsdstyle.js`. Set this when the assets live somewhere other than `./assets/`.
-- **`include-source`** (boolean, default `true`) — Embed the raw XSD source for each component. Set to `false` to drop the per-component source blocks.
-- **`doc-html`** (string, default `safe`) — How to render embedded HTML inside `xs:documentation`. `safe` applies an allowlist of tags and attributes and strips `javascript:`, `data:`, `vbscript:`, and `file:` hrefs. `permissive` copies every element and attribute verbatim — only use this when every schema author is trusted, since the output can carry `<script>`, `on*=` handlers, etc.
-- **`ui-lang`** (string, default `en`) — BCP 47 language tag for the UI chrome. Emitted as the `<html lang="…">` attribute on the generated page and selects which UI message catalog (sidebar headings, table column titles, button labels, occurrence tooltips, etc.) is used. Currently only `en` is bundled; unknown tags fall back to English. See [Localisation](#localisation) for adding a translation.
-- **`xml-lang`** (string, default `en`) — BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on `<xs:annotation>` / `<xs:documentation>` wrappers when the block has no per-block `xml:lang`. Per-block `xml:lang` on the XSD always wins for its own wrapper. This parameter does not affect chrome lookup or `<html lang>`. Callers who previously passed `xml-lang=fr` expecting French chrome now need `ui-lang=fr`.
-- **`dir`** (string, default `auto`) — Writing direction emitted as the `<html dir="…">` attribute. `auto` resolves to `rtl` when `ui-lang`'s primary subtag is one of `ar`, `he`, `fa`, `ur`, `ps`, `yi`, `dv`, `ug`, `ckb`, `sd`, `arc`, and to `ltr` otherwise. Pass `ltr` or `rtl` to override the inference. The stylesheet uses CSS logical properties throughout, so the chrome flips automatically; XSD source blocks stay LTR regardless.
-- **`noindex`** (boolean, default `false`) — When `true`, emit `<meta name="robots" content="noindex">` in the page `<head>` so search engines skip indexing it. Useful for preview deployments, drafts, or internal-only schemas.
+- **`page-title`** (string) — Page title. Defaults to `@id`, then `Schema: {targetNamespace}`, then `XSD Documentation`.
+- **`asset-base-uri`** (string, default `./assets/`) — URL prefix for `xsdstyle.css` and `xsdstyle.js`. Set this when the assets live somewhere other than `./assets/`.
+- **`show-source`** (boolean, default `true`) — Embed the raw XSD source for each component. Set to `false` to drop the per-component source blocks.
+- **`documentation-markup`** (string, default `safe`) — How to render embedded HTML inside `xs:documentation`. `safe` applies an allowlist of tags and attributes; `href` values reject `javascript:`, `data:`, `vbscript:`, and `file:` schemes. `permissive` copies every element and attribute verbatim — only use this when every schema author is trusted, since the output can carry `<script>`, `on*=` handlers, etc.
+- **`interface-language`** (string, default `en`) — BCP 47 language tag for the UI chrome. Emitted as the `<html lang="…">` attribute on the generated page and selects which UI message catalog (sidebar headings, table column titles, button labels, occurrence tooltips, etc.) is used. Currently only `en` is bundled; unknown tags fall back to English. See [Localisation](#localisation) for adding a translation.
+- **`documentation-language`** (string, default `en`) — BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on `<xs:annotation>` / `<xs:documentation>` wrappers when the block has no per-block `xml:lang`. Per-block `xml:lang` on the XSD always wins for its own wrapper. This parameter does not affect chrome lookup or `<html lang>`.
+- **`interface-direction`** (string, default `auto`) — Writing direction emitted as the `<html dir="…">` attribute. `auto` resolves to `rtl` when `interface-language`'s primary subtag is one of `ar`, `he`, `fa`, `ur`, `ps`, `yi`, `dv`, `ug`, `ckb`, `sd`, `arc`, and to `ltr` otherwise. Pass `ltr` or `rtl` to override the inference. The stylesheet uses CSS logical properties throughout, so the chrome flips automatically; XSD source blocks stay LTR regardless.
+- **`robots-noindex`** (boolean, default `false`) — When `true`, emit `<meta name="robots" content="noindex">` in the page `<head>` so search engines skip indexing it. Useful for preview deployments, drafts, or internal-only schemas.
 
 Example with parameters:
 
@@ -79,9 +79,9 @@ saxon \
   -s:schema.xsd \
   -xsl:xsdstyle.xsl \
   -o:out/index.html \
-  title="My Schema" \
-  base-href=/static/xsdstyle/ \
-  include-source=false
+  page-title="My Schema" \
+  asset-base-uri=/static/xsdstyle/ \
+  show-source=false
 ```
 
 ## Localisation
@@ -90,20 +90,20 @@ The UI chrome rendered by `xsdstyle.xsl` — sidebar headings, page metadata
 labels, table column titles, button labels, occurrence tooltips, the "Show
 more / Show less" toggle, and so on — flows through a single inline message
 catalog (`xsl:variable name="i18n-messages"` near the top of Region 9). The
-active locale is picked from the `ui-lang` parameter via this fallback chain:
+active locale is picked from the `interface-language` parameter via this fallback chain:
 
 1. Exact tag match (e.g. `fr-CA`)
 2. Primary subtag match (e.g. `fr`)
 3. English (`en`)
 
-The HTML `lang="…"` attribute always reflects the caller-supplied `ui-lang`
+The HTML `lang="…"` attribute always reflects the caller-supplied `interface-language`
 verbatim, even when the message lookup falls back. Missing keys render as
 `[[key]]` so omissions are visible during development.
 
-XSD content language is a separate axis, controlled by `xml-lang`. When an
+XSD content language is a separate axis, controlled by `documentation-language`. When an
 `<xs:annotation>` or `<xs:documentation>` block carries its own `@xml:lang`,
 that wins for the surrounding HTML wrapper; otherwise the wrapper falls back
-to `lang="$xml-lang"`. The chrome locale (`ui-lang`) is independent and never
+to `lang="$documentation-language"`. The chrome locale (`interface-language`) is independent and never
 shows up on the doc wrappers.
 
 A small fixed-shape subset of messages is also emitted as a JSON `<script
@@ -117,7 +117,7 @@ standalone.
 1. Copy the `'en':` block inside `$i18n-messages`.
 2. Change the outer key to your BCP 47 tag (lowercase; e.g. `'fr'`, `'pt-br'`).
 3. Translate the values; leave keys untouched — they are part of the contract.
-4. Test the render with `-param:ui-lang=<your-tag>`.
+4. Test the render with `-param:interface-language=<your-tag>`.
 
 Sentences that embed `<code>` elements (such as the XSD 1.1 features list)
 are split into adjacent keys around the literal, or use the
@@ -140,6 +140,10 @@ SAXON_CP=/path/to/saxon-he.jar make test
 ```
 
 Per-run HTML reports are written to `test/xspec/` (gitignored). Run `make test-clean` to drop them.
+
+### Dev container
+
+A [dev container](https://containers.dev/) is provided under `.devcontainer/` that reproduces the CI toolchain — Java 21, Node 24, `xmllint`, and a version-matched Chromium + chromedriver for the accessibility audit. Open the repo in a dev-container-aware editor (VS Code "Reopen in Container") or `devcontainer up`; on first creation it pre-fetches Saxon, XSpec, `vnu.jar`, Prettier, and `@axe-core/cli` into `.tools/`, after which `make test`, `make lint`, `make render`, `make smoke-test`, and `make lint-a11y` all run out of the box.
 
 ## History
 

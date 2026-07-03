@@ -17,35 +17,35 @@ inputs:
     description: Filename for the generated HTML page (placed inside output-dir).
     required: false
     default: index.html
-  title:
+  page-title:
     description: Page title. Defaults to the schema @id, then targetNamespace, then "XSD Documentation".
     required: false
     default: ""
-  base-href:
+  asset-base-uri:
     description: URL prefix for the bundled xsdstyle.css and xsdstyle.js.
     required: false
     default: "./assets/"
-  include-source:
+  show-source:
     description: Embed the raw XSD source per component (true|false).
     required: false
     default: "true"
-  doc-html:
+  documentation-markup:
     description: How to render embedded HTML inside xs:documentation (safe|permissive).
     required: false
     default: "safe"
-  ui-lang:
+  interface-language:
     description: BCP 47 language tag for the UI chrome (<html lang="…"> and message catalog).
     required: false
     default: "en"
-  xml-lang:
+  documentation-language:
     description: BCP 47 language tag for XSD-sourced prose. Used as the lang="…" fallback on documentation wrappers when no per-block xml:lang.
     required: false
     default: "en"
-  dir:
-    description: Writing direction for <html dir="…"> (auto|ltr|rtl). auto infers rtl from ui-lang.
+  interface-direction:
+    description: Writing direction for <html dir="…"> (auto|ltr|rtl). auto infers rtl from interface-language.
     required: false
     default: "auto"
-  noindex:
+  robots-noindex:
     description: Emit <meta name="robots" content="noindex"> in the generated page (true|false).
     required: false
     default: "false"
@@ -61,11 +61,11 @@ runs:
     INPUT_XSD_FILE: ${{ inputs.xsd-file }}
     INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
     INPUT_OUTPUT_HTML: ${{ inputs.output-html }}
-    INPUT_TITLE: ${{ inputs.title }}
-    INPUT_BASE_HREF: ${{ inputs.base-href }}
-    INPUT_INCLUDE_SOURCE: ${{ inputs.include-source }}
-    INPUT_DOC_HTML: ${{ inputs.doc-html }}
-    INPUT_UI_LANG: ${{ inputs.ui-lang }}
-    INPUT_XML_LANG: ${{ inputs.xml-lang }}
-    INPUT_DIR: ${{ inputs.dir }}
-    INPUT_NOINDEX: ${{ inputs.noindex }}
+    INPUT_PAGE_TITLE: ${{ inputs.page-title }}
+    INPUT_ASSET_BASE_URI: ${{ inputs.asset-base-uri }}
+    INPUT_SHOW_SOURCE: ${{ inputs.show-source }}
+    INPUT_DOCUMENTATION_MARKUP: ${{ inputs.documentation-markup }}
+    INPUT_INTERFACE_LANGUAGE: ${{ inputs.interface-language }}
+    INPUT_DOCUMENTATION_LANGUAGE: ${{ inputs.documentation-language }}
+    INPUT_INTERFACE_DIRECTION: ${{ inputs.interface-direction }}
+    INPUT_ROBOTS_NOINDEX: ${{ inputs.robots-noindex }}

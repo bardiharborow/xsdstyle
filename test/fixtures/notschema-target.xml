@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- A well-formed XML document whose root is deliberately not xs:schema. -->
+<notASchema>placeholder</notASchema>

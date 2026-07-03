@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:cycle">
+  <!-- cycle-a includes cycle-b which includes cycle-a again. -->
+  <xs:include schemaLocation="cycle-b.xsd" />
+  <xs:element name="A" type="xs:string" />
+</xs:schema>

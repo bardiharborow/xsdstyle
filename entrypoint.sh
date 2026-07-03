@@ -22,14 +22,14 @@ set -- \
 
 # Only forward stylesheet parameters when the caller set them non-empty,
 # so the XSL's own defaults remain authoritative for omitted inputs.
-[ -n "${INPUT_TITLE:-}" ]          && set -- "$@" "title=$INPUT_TITLE"
-[ -n "${INPUT_BASE_HREF:-}" ]      && set -- "$@" "base-href=$INPUT_BASE_HREF"
-[ -n "${INPUT_INCLUDE_SOURCE:-}" ] && set -- "$@" "include-source=$INPUT_INCLUDE_SOURCE"
-[ -n "${INPUT_DOC_HTML:-}" ]       && set -- "$@" "doc-html=$INPUT_DOC_HTML"
-[ -n "${INPUT_UI_LANG:-}" ]        && set -- "$@" "ui-lang=$INPUT_UI_LANG"
-[ -n "${INPUT_XML_LANG:-}" ]       && set -- "$@" "xml-lang=$INPUT_XML_LANG"
-[ -n "${INPUT_DIR:-}" ]            && set -- "$@" "dir=$INPUT_DIR"
-[ -n "${INPUT_NOINDEX:-}" ]        && set -- "$@" "noindex=$INPUT_NOINDEX"
+[ -n "${INPUT_PAGE_TITLE:-}" ]              && set -- "$@" "page-title=$INPUT_PAGE_TITLE"
+[ -n "${INPUT_ASSET_BASE_URI:-}" ]          && set -- "$@" "asset-base-uri=$INPUT_ASSET_BASE_URI"
+[ -n "${INPUT_SHOW_SOURCE:-}" ]             && set -- "$@" "show-source=$INPUT_SHOW_SOURCE"
+[ -n "${INPUT_DOCUMENTATION_MARKUP:-}" ]    && set -- "$@" "documentation-markup=$INPUT_DOCUMENTATION_MARKUP"
+[ -n "${INPUT_INTERFACE_LANGUAGE:-}" ]      && set -- "$@" "interface-language=$INPUT_INTERFACE_LANGUAGE"
+[ -n "${INPUT_DOCUMENTATION_LANGUAGE:-}" ]  && set -- "$@" "documentation-language=$INPUT_DOCUMENTATION_LANGUAGE"
+[ -n "${INPUT_INTERFACE_DIRECTION:-}" ]     && set -- "$@" "interface-direction=$INPUT_INTERFACE_DIRECTION"
+[ -n "${INPUT_ROBOTS_NOINDEX:-}" ]          && set -- "$@" "robots-noindex=$INPUT_ROBOTS_NOINDEX"
 
 java -cp "/opt/xsdstyle/lib/saxon-he.jar:/opt/xsdstyle/lib/xmlresolver.jar" \
     net.sf.saxon.Transform "$@"
