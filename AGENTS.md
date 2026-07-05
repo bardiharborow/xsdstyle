@@ -1,163 +1,218 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for coding agents working in this repository.
 
-## What this is
+## Project Snapshot
 
-A single XSLT 3.0 stylesheet (`xsdstyle.xsl`, ~3900 lines) that transforms a W3C
-XSD 1.1 schema into a self-contained, accessible, deterministic HTML
-documentation page. Shipped three ways: directly via Saxon, as a `make` target,
-and as a Docker-based GitHub Action (`action.yml` → `Dockerfile` → `entrypoint.sh`).
+`xsdstyle` is a single-file XSLT 3.0 documentation generator. `xsdstyle.xsl`
+transforms W3C XSD 1.1 schemas into one self-contained, accessible,
+deterministic HTML page.
 
-## Design documents are the contract
+It ships directly via Saxon, through local `make` targets, and as a Docker-based
+GitHub Action: `action.yml` -> `Dockerfile` -> `entrypoint.sh`.
 
-Three documents under `docs/` define the product, and they form an explicit
-precedence chain — when they disagree, the higher one wins, and the lower one
-should be amended rather than allowing drift:
+Keep the distribution as one stylesheet. Do not add `xsl:include`,
+`xsl:import`, or `xsl:use-package`.
 
-1. **`docs/specification.md`** — the product contract. Its "must / must not /
-   should / may" are normative for the generator.
-2. **`docs/architecture.md`** — how the stylesheet satisfies that contract:
-   the phase pipeline, record shapes, indexes, QName/namespace resolution,
-   anchor scheme, security model, and determinism rules.
-3. **`docs/dom.md`** — the generated HTML DOM contract (element structure,
-   classes, ARIA, reference-state markup).
+## Source Of Truth
 
-Read the relevant document before any non-trivial change. The W3C source specs
-under `specifications/` (XSD 1.1 Parts 1 & 2, XSLT 3.0; gitignored, large) are
-authoritative for XSD/XSLT terminology.
+The design documents under `docs/` are the product contract. When they disagree,
+the higher-priority document wins; amend lower-priority docs rather than
+allowing drift.
+
+1. `docs/specification.md` - normative product behavior. Its "must", "must
+   not", "should", and "may" statements define generator requirements.
+2. `docs/architecture.md` - how the stylesheet satisfies the specification:
+   pipeline, records, indexes, QName and namespace resolution, anchor scheme,
+   security model, and determinism rules.
+3. `docs/dom.md` - generated HTML DOM contract: structure, classes, ARIA, and
+   reference-state markup.
+
+Read the relevant document before non-trivial behavior changes. W3C source specs
+under `specifications/` are gitignored and large, but authoritative for XSD and
+XSLT terminology when present.
+
+## Required Workflow
+
+Work test-first for behavior changes:
+
+1. Add or update the relevant `test/*.xspec` scenario.
+2. Run the focused test and confirm it fails for the expected reason.
+3. Implement the change.
+4. Re-run the focused test.
+5. Run the broader suite appropriate to the change, usually `make test`.
+
+This applies to bug fixes and new features. Do not backfill tests to match an
+implementation that has already been written.
+
+Documentation-only edits do not require XSpec tests, but keep terminology and
+precedence aligned with the design docs.
 
 ## Commands
 
-Saxon is discovered automatically from `brew install saxon` (macOS); otherwise
-`make` vendors pinned Saxon-HE + xmlresolver + XSpec jars into `.tools/` on first
-run (checksum-verified). Override the Saxon classpath with `SAXON_CP=/path/to/saxon-he.jar`.
+Saxon is discovered from `brew install saxon` on macOS. Otherwise, `make`
+vendors checksum-verified Saxon-HE, xmlresolver, and XSpec jars into `.tools/`.
+Override Saxon with `SAXON_CP=/path/to/saxon-he.jar`.
 
 ```sh
-make test            # run every test/*.xspec under XSpec
-make lint            # lint-xml (xmllint well-formedness) + lint-format (prettier --check)
-make format          # apply Prettier in place
-make render SCHEMA=path/to/schema.xsd   # render one XSD -> out/index.html (+ assets)
-make smoke-test      # render the W3C XSD-of-XSDs, validate HTML5/CSS via vnu.jar
-make lint-a11y       # axe-core WCAG 2.2 AA audit of the smoke-test output
+make test                              # run every test/*.xspec under XSpec
+make test XSPEC_TESTS=test/foo.xspec   # run one XSpec file
+make lint                              # xmllint well-formedness + prettier --check
+make format                            # apply Prettier in place
+make render SCHEMA=path/to/schema.xsd  # render to out/index.html and copy assets
+make smoke-test                        # render XSD-of-XSDs and validate HTML5/CSS
+make lint-a11y                         # axe-core WCAG 2.2 AA audit of smoke output
+make test-clean                        # remove per-run XSpec HTML reports
 ```
 
-To run a **single** XSpec file, override `XSPEC_TESTS` on the command line (it
-overrides the in-file default and reuses all Saxon/XSpec setup):
+Prettier uses the pinned XML plugin by absolute plugin path; see the `PRETTIER`
+comment in the Makefile. `.prettierrc.json` intentionally omits `plugins`. Use
+`make install-prettier` to install the pinned global versions.
 
-```sh
-make test XSPEC_TESTS=test/parameters.xspec
-```
+CI runs lint, XSpec tests, smoke test through the action, HTML5 validation, and
+WCAG 2.2 AA accessibility audit. The dev container reproduces that toolchain.
 
-Prettier requires the XML plugin and is invoked by **absolute plugin path** (an
-ESM loader quirk — see the `PRETTIER` comment in the Makefile; `.prettierrc.json`
-deliberately omits `"plugins"`). `make install-prettier` installs the pinned
-versions globally. Per-run XSpec HTML reports land in `test/xspec/` (gitignored);
-`make test-clean` removes them.
+## Stylesheet Architecture
 
-CI (`.github/workflows/ci.yml`) runs five jobs on every push/PR: lint, XSpec
-test, smoke-test (renders via the action itself), HTML5 validation (vnu.jar), and
-the WCAG 2.2 AA a11y audit. A dev container under `.devcontainer/` reproduces the
-full toolchain (Java 21, Node 24, xmllint, version-matched Chromium/chromedriver).
+Follow the pipeline in `docs/architecture.md`:
 
-## Test-driven development
+1. Normalize public parameters into one config map.
+2. Collect the schema document graph.
+3. Build schema, component, reference, contextual, and diagnostic records.
+4. Build indexes and relationship graphs from those records.
+5. Render HTML from records and indexes.
 
-Work test-first. Before changing `xsdstyle.xsl` (or any behaviour-bearing code),
-add or update the relevant `test/*.xspec` scenario so it captures the intended
-behaviour, run it, and confirm it **fails** for the expected reason. Only then
-make the change that turns it green, and re-run `make test` to confirm. This
-applies to bug fixes (write a failing test that reproduces the bug first) as well
-as new features. Don't write the implementation and the test together, and don't
-backfill a test after the fact to match whatever the code happens to do.
+Renderers consume records and indexes; they must not rediscover global facts by
+rescanning raw XSD nodes. Facts affecting identity, references, diagnostics,
+backlinks, anchors, schema membership, or summaries belong in the model or index
+layer.
 
-## Stylesheet architecture
+- `f:config()` is the single normalized configuration boundary.
+- `f:collect-schemas` walks `xs:import`, `xs:include`, `xs:redefine`, and
+  `xs:override` transitively, including chameleon effective namespaces and a
+  visited set keyed by URI plus effective namespace.
+- Helper functions live in `urn:xsdoc:functions` and use the `f:` prefix in
+  both `xsdstyle.xsl` and XSpec tests. Do not use `x:` for project helpers;
+  XSpec reserves it.
+- Inter-component lookup uses Clark notation (`{ns-uri}localname`) through
+  helpers such as `f:clark`. Never compare namespace prefixes.
+- `$schemas` is threaded as a tunnel parameter into mode-driven renderers.
 
-- **Single file, no includes.** No `xsl:include` / `import` / `use-package` —
-  this is a hard mandate; the distribution must remain one stylesheet.
+## Modes
 
-- **Layered pipeline, not a flat template tree.** The file follows the layers in
-  `docs/architecture.md`: normalize parameters → collect the schema document
-  graph → build component/reference/diagnostic **records** → build indexes →
-  render. Renderers consume records and ask indexes for relationships; they must
-  **not** rediscover global facts by re-scanning raw XSD nodes. `f:config()`
-  produces the single normalized config map; `f:collect-schemas` walks
-  `xs:import`/`include`/`redefine`/`override` transitively (with the chameleon
-  effective-namespace rule and a visited set keyed by URI + effective namespace).
+Keep mode responsibilities separated:
 
-- **Function namespace / prefix gotcha.** Helper functions live in
-  `urn:xsdoc:functions`, bound to prefix **`f:`** in both `xsdstyle.xsl` and the
-  `*.xspec` tests (e.g. `f:clark`, `f:anchor`, `f:qname`, `f:reference-qname`).
-  Do **not** use the prefix `x:` — it is reserved by XSpec for its own
-  namespace.
+- Unnamed mode (`shallow-skip`) - main render walk.
+- `doc` (`text-only-copy`) - `xs:documentation` HTML handling.
+- `source` (`shallow-skip`) - XSD source pretty-printer.
+- `particle` (`shallow-skip`) - content-model particles.
+- `annotation` - `xs:annotation` documentation blocks.
+- `inline-type` - anonymous simple and complex types embedded in owner articles.
 
-- **Six modes.** Unnamed (`shallow-skip`) for the main render walk; `doc`
-  (`text-only-copy`) for `xs:documentation` HTML; `source` (`shallow-skip`) for
-  the XSD source pretty-printer; `particle` (`shallow-skip`) for content-model
-  particles; `annotation` for rendering `xs:annotation` documentation blocks;
-  `inline-type` for anonymous simple/complex types embedded in owner articles.
-  The `$schemas` record set is threaded as a tunnel parameter into the
-  mode-driven renderers.
+## Determinism And Anchors
 
-- **Clark form for all lookups.** Inter-component references resolve through
-  Clark notation (`{ns-uri}localname`) via `f:clark`; never compare prefixes.
+Same input plus same parameters must produce byte-identical HTML.
 
-- **Determinism is required.** Same input + params → byte-identical HTML. No
-  timestamps, random IDs, or host paths. Synthetic namespace IDs (`ns1`, `ns2`,
-  …) are assigned in first-seen schema-collection order; anchors follow the
-  `{kind-abbrev}-{ns-id}-{localname}` scheme in `docs/architecture.md` §9.
-  Don't introduce ordering that depends on map iteration or hashing.
+Do not introduce timestamps, random IDs, host paths, or ordering dependent on
+map iteration or hashing. Synthetic namespace IDs (`ns1`, `ns2`, etc.) are
+assigned in first-seen schema-collection order. Anchors follow
+`docs/architecture.md` section 9 and `docs/dom.md`:
 
-- **`vc:*` is displayed, not filtered.** Output is a superset of all XSD
-  versions; there is deliberately no `xsd-version` parameter and no conditional
-  inclusion. Don't add filtering.
+- Global components: `{kind-abbrev}-{ns-id}-{localname}`.
+- Contextual constructs: owner-anchor based deterministic suffixes.
+- Diagnostics: stable diagnostic record IDs or deterministic diagnostic anchors.
 
-- **Diagnostics are documentation facts, not validation errors.** Failed loads,
-  unresolved QNames, skipped cycles, etc. become first-class diagnostic records
-  rendered into the page; wording uses "not loaded", "not resolved", "not
-  expanded". References are never "guessed away".
+## Diagnostics And References
 
-- **Documentation HTML sanitisation is security-sensitive.** `xs:documentation`
-  is untrusted input. `documentation-markup=safe` (default) applies an
-  element/attribute allowlist plus URL-scheme checks (rejects `javascript:`,
-  `data:`, `vbscript:`, `file:`). `permissive` copies verbatim and is the only
-  path that can emit `<script>`/`on*=`. Treat changes to the allowlist or the
-  safe-href logic as security changes.
+Diagnostics are documentation facts, not validation errors. Failed loads,
+unresolved QNames, skipped cycles, invalid parameter normalization, and similar
+conditions become visible diagnostic records.
 
-## Parameters
+Use wording that describes documentation behavior: "not loaded", "not
+resolved", or "not expanded". References are never guessed away.
 
-Eight public `xsl:param`s (top of `xsdstyle.xsl`), each mirrored as a GitHub
-Action input (`action.yml`) and forwarded by `entrypoint.sh` only when non-empty
-so XSL defaults stay authoritative: `page-title`, `asset-base-uri`, `show-source`,
-`documentation-markup`, `interface-language`, `documentation-language`,
-`interface-direction`, `robots-noindex`. Override on the Saxon CLI with
-`name=value`. Invalid values are normalized to the documented default and
-surfaced as a diagnostic, not a hard error. See `docs/specification.md` and the
-README for per-parameter semantics.
+Every QName-valued reference should become a reference record. Reference records
+classify states as internal resolved, built-in/specification, external
+unresolved, or unresolved with diagnostics.
 
-## Assets and progressive enhancement
+## Parameters And Wrappers
 
-`assets/xsdstyle.css` (BEM, CSS custom properties + `prefers-color-scheme` dark
-mode, CSS logical properties for RTL) and `assets/xsdstyle.js` (vanilla, no
-dependencies: search/filter, copy-link, expand/collapse, theme toggle, `/` and
-`Esc` shortcuts). The page renders fully without JavaScript; **JS never adds
-schema content**, only affordances, and derives its search index from the
-rendered DOM. The stylesheet links these under `asset-base-uri`; `entrypoint.sh`
-and `make render` copy `assets/` next to the generated HTML.
+Eight public `xsl:param`s live at the top of `xsdstyle.xsl`:
 
-Icon SVGs are stored as `assets/ico-*.svg` and read at transform time
-(resolved relative to the stylesheet via `static-base-uri()`), so rendering
-requires `assets/` to sit next to `xsdstyle.xsl`. `f:icon-sprite()` emits each
-icon once as a `<symbol>` in a hidden sprite; `f:icon()` emits the use-site
-`<svg><use>` reference — see `docs/dom.md` §3. To add an icon, drop the file
-in `assets/` and list it in `$icon-names`.
+- `page-title`
+- `asset-base-uri`
+- `show-source`
+- `documentation-markup`
+- `interface-language`
+- `documentation-language`
+- `interface-direction`
+- `robots-noindex`
 
-## Localisation
+Each parameter is mirrored as a GitHub Action input and forwarded by
+`entrypoint.sh` only when non-empty, so stylesheet defaults remain authoritative.
+Override parameters on the Saxon CLI with `name=value`.
 
-UI chrome strings flow through one inline catalog (`xsl:variable name="i18n-messages"`),
-selected by `interface-language` (exact tag → primary subtag → `en`). Missing
-keys render as `[[key]]` so omissions are visible. `interface-language` (chrome +
-`<html lang>`) is a separate axis from `documentation-language` (fallback `lang`
-on XSD-prose wrappers when a block has no `xml:lang`). A fixed subset is also
-emitted as JSON for `xsdstyle.js`. To add a locale: copy the `'en':` block,
-change the outer key to a lowercase BCP-47 tag, translate values, leave keys
-untouched.
+Invalid values are normalized to documented defaults and surfaced as
+diagnostics, not hard failures.
+
+## Security
+
+Treat `xs:documentation` and `xs:appinfo` as untrusted input.
+
+`documentation-markup=safe` is the default. It applies the allowlist, only
+promotes no-namespace or XHTML elements to HTML, strips schema-authored IDs that
+could collide with generated anchors, and rejects unsafe URL schemes such as
+`javascript:`, `data:`, `vbscript:`, and `file:`.
+
+`documentation-markup=permissive` may copy documentation verbatim and is the only
+path that can emit `<script>` or `on*=` attributes. Treat allowlist, URL-scheme,
+escaping, and permissive-mode changes as security-sensitive.
+
+The generator must display `vc:*` versioning attributes. Do not add an
+`xsd-version` parameter or filter output by XSD version.
+
+## Assets And Progressive Enhancement
+
+The page must render all schema facts without JavaScript. JavaScript adds only
+affordances such as search/filter, copy-link, expand/collapse, theme toggle, and
+keyboard shortcuts. It derives its search index from the rendered DOM and must
+not fetch, synthesize, or evaluate schema content.
+
+- `assets/xsdstyle.css` uses BEM, CSS custom properties,
+  `prefers-color-scheme`, and CSS logical properties for RTL.
+- `assets/xsdstyle.js` is vanilla JavaScript with no dependencies.
+- `entrypoint.sh` and `make render` copy `assets/` beside the generated HTML.
+- The stylesheet links assets under `asset-base-uri`.
+
+Icon SVGs live in `assets/ico-*.svg` and are read at transform time relative to
+`static-base-uri()`. To add an icon, add the file under `assets/` and list it in
+`$icon-names`.
+
+## DOM, Accessibility, And Styling
+
+The generated DOM contract is in `docs/dom.md`. Preserve semantic HTML,
+landmarks, headings, stable classes and IDs, reference states, and diagnostic
+reachability.
+
+Facts must not exist only in a class name, color, icon, tooltip, or JavaScript
+state. CSS may reinforce meaning, but color must not be the only distinction.
+Filtering may visually hide unmatched content but must not remove schema facts
+from the document.
+
+Use logical CSS properties where practical. Code-like values should remain
+readable in LTR and RTL interfaces.
+
+## Localization
+
+UI strings live in the inline `i18n-messages` catalog. Lookup is deterministic:
+exact BCP 47 tag, then primary language subtag, then English. Missing keys
+render as `[[key]]`.
+
+`interface-language` controls generated chrome and `<html lang>`.
+`documentation-language` is only a fallback for XSD-authored prose wrappers when
+a block has no `xml:lang`. Schema-authored names, QNames, namespace URIs, XPath,
+regexes, facet values, and source code are not translated.
+
+To add a locale, copy the `en` block, change the outer key to a lowercase BCP
+47 tag, translate values, and leave message keys unchanged. A fixed subset of
+messages is emitted as JSON for `xsdstyle.js`.

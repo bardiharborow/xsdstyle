@@ -162,12 +162,13 @@ An edge record should preserve the authored composition declaration:
 ```xquery
 map {
   'relation': 'include' | 'import' | 'redefine' | 'override',
-  'from-document-id': xs:string,
   'declared-namespace': xs:string?,
   'schema-location': xs:string?,
   'resolved-uri': xs:string?,
   'source-node': element(),
-  'status': 'loaded' | 'not-loaded' | 'not-requested' | 'cycle-skipped'
+  'target-node': node()?,
+  'effective-target-namespace': xs:string?,
+  'status': 'loaded' | 'not-loaded' | 'not-schema' | 'not-requested' | 'cycle-skipped'
 }
 ```
 
@@ -401,9 +402,9 @@ They must not be guessed away.
 
 Indexes should be built after the component and reference records exist.
 
-The stylesheet prebuilds six reverse-reference maps, once, in the shell
-template. Keys are the Clark name of the referenced component; values are the
-referencing nodes in document order:
+The stylesheet prebuilds six reverse-reference maps through shared index
+helpers before rendering component sections. Keys are the Clark name of the
+referenced component; values are the referencing nodes in document order:
 
 | Index                      | Key                         | Value                                                    |
 | -------------------------- | --------------------------- | -------------------------------------------------------- |
@@ -902,16 +903,11 @@ without weakening `docs/specification.md`.
   chameleon document included under two effective namespaces resolves to the
   first collected instance rather than the per-instance document records with
   their own IDs described in section 4.
-- The collection walk only follows composition declarations that carry
-  `schemaLocation` and records only loaded documents; load failures and
-  no-`schemaLocation` imports are reconstructed by a separate diagnostics
-  replay of the walk, rather than being captured by the per-edge status
-  records of section 4.
-- Reference resolution happens inside each reverse index rather than
-  producing the centralized reference records of section 5.3, so reference
-  states and diagnostics are not derived from one shared model. The
-  unresolved-reference scan is a single shared function feeding both the
-  diagnostics list and the `aria-describedby` wiring on unresolved markers.
+- Reference resolution happens inside shared index and unresolved-reference
+  helpers rather than producing the centralized reference records of section
+  5.3, so reference states and diagnostics are not derived from one shared
+  model. The unresolved-reference scan feeds both the diagnostics list and the
+  `aria-describedby` wiring on unresolved markers.
 - The four end-to-end fixtures and their validation gates (section 18) are
   not implemented.
 

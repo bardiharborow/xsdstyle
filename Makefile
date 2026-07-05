@@ -1,4 +1,40 @@
-.PHONY: lint lint-xml lint-format lint-a11y format install-prettier install-xspec install-saxon install-vnu install-axe install-sample-schemas test test-coverage coverage test-clean render smoke-test smoke-test-clean
+.PHONY: \
+	lint lint-xml lint-format lint-a11y format \
+	install-prettier install-xspec install-saxon install-vnu install-axe install-sample-schemas \
+	test test-coverage coverage test-clean \
+	render smoke-test smoke-test-clean
+
+TOOLS_DIR := .tools
+ASSETS_DIR := assets
+TEST_DIR := test
+XSL := xsdstyle.xsl
+
+CURL := curl -fsSL
+
+define require_saxon_cp
+	@if [ -z "$$SAXON_CP" ]; then \
+		echo "ERROR: SAXON_CP could not be resolved."; \
+		echo "  Try: brew install saxon  (or)  make install-saxon"; \
+		exit 1; \
+	fi
+endef
+
+define require_xspec_tests
+	@if [ -z "$(XSPEC_TESTS)" ]; then echo "no xspec tests found in $(TEST_DIR)/"; exit 1; fi
+endef
+
+define download_checked
+if [ ! -f "$(1)" ]; then \
+	echo "==> Downloading $(2) into $(TOOLS_DIR)/"; \
+	mkdir -p "$(TOOLS_DIR)"; \
+	$(CURL) -o "$(1)" "$(3)"; \
+	echo "$(4)  $(1)" | shasum -a 256 -c -; \
+fi
+endef
+
+define run_xspec
+	@set -e; for t in $(XSPEC_TESTS); do echo "==> $$t"; "$(XSPEC)" $(1) "$$t"; done
+endef
 
 PRETTIER_VERSION := 3.3.3
 PRETTIER_XML_VERSION := 3.4.1
@@ -12,17 +48,21 @@ PRETTIER := prettier --plugin $$(npm root -g)/@prettier/plugin-xml/src/plugin.js
 # XSpec is not packaged in Homebrew, so we vendor a pinned release into .tools/.
 XSPEC_VERSION := 4.0.2
 XSPEC_SHA256  := fcbbf2b79a2933ef021f6bcb1ac72e6225287327b19531e54e505d96f7c180cf
-XSPEC_DIR     := .tools/xspec-$(XSPEC_VERSION)
+XSPEC_DIR     := $(TOOLS_DIR)/xspec-$(XSPEC_VERSION)
 XSPEC         ?= $(XSPEC_DIR)/bin/xspec.sh
+XSPEC_ZIP     := $(TOOLS_DIR)/xspec.zip
+XSPEC_TESTS   := $(wildcard $(TEST_DIR)/*.xspec)
 
 # Saxon-HE and xmlresolver jars used by xspec.sh. Pinned to the same releases
 # as the Dockerfile so the test classpath matches the runtime image.
 SAXON_VERSION       := 13.0
 SAXON_SHA256        := 258fb4788b8e1bd986f9aed14269669412da88c7bb289b747878d4353f6168aa
-SAXON_LOCAL         := .tools/saxon-he-$(SAXON_VERSION).jar
+SAXON_LOCAL         := $(TOOLS_DIR)/saxon-he-$(SAXON_VERSION).jar
+SAXON_URL           := https://repo1.maven.org/maven2/net/sf/saxon/Saxon-HE/$(SAXON_VERSION)/Saxon-HE-$(SAXON_VERSION).jar
 XMLRESOLVER_VERSION := 6.0.23
 XMLRESOLVER_SHA256  := 8bd99540e826dada93126fa05c3a0b54f5db00701d7be98193673099307e77e2
-XMLRESOLVER_LOCAL   := .tools/xmlresolver-$(XMLRESOLVER_VERSION).jar
+XMLRESOLVER_LOCAL   := $(TOOLS_DIR)/xmlresolver-$(XMLRESOLVER_VERSION).jar
+XMLRESOLVER_URL     := https://repo1.maven.org/maven2/org/xmlresolver/xmlresolver/$(XMLRESOLVER_VERSION)/xmlresolver-$(XMLRESOLVER_VERSION).jar
 
 # Homebrew ships saxon-he with a MANIFEST.MF Class-Path that pulls in its
 # bundled xmlresolver automatically, so on macOS one jar is enough.
@@ -42,14 +82,12 @@ VENDORED_SAXON_CP := $(SAXON_LOCAL):$(XMLRESOLVER_LOCAL)
 SAXON_CP ?= $(or $(BREW_SAXON),$(VENDORED_SAXON_CP))
 export SAXON_CP
 
-XSPEC_TESTS := $(wildcard test/*.xspec)
-
 # Run all lint checks: XML well-formedness + Prettier format check.
 lint: lint-xml lint-format
 
 # Well-formedness check for the stylesheet. Does not require network or schemas.
 lint-xml:
-	xmllint --noout xsdstyle.xsl
+	xmllint --noout $(XSL)
 
 # Verify formatting without modifying files. Fails if any file would be changed.
 lint-format:
@@ -63,13 +101,13 @@ format:
 # a no-op once the target script exists, so this is safe to call repeatedly.
 install-xspec:
 	@if [ ! -x "$(XSPEC)" ]; then \
-		echo "==> Downloading xspec v$(XSPEC_VERSION) into .tools/"; \
-		mkdir -p .tools; \
-		curl -fsSL -o .tools/xspec.zip "https://github.com/xspec/xspec/archive/refs/tags/v$(XSPEC_VERSION).zip"; \
-		echo "$(XSPEC_SHA256)  .tools/xspec.zip" | shasum -a 256 -c -; \
-		unzip -q -o .tools/xspec.zip -d .tools/; \
+		echo "==> Downloading xspec v$(XSPEC_VERSION) into $(TOOLS_DIR)/"; \
+		mkdir -p "$(TOOLS_DIR)"; \
+		$(CURL) -o "$(XSPEC_ZIP)" "https://github.com/xspec/xspec/archive/refs/tags/v$(XSPEC_VERSION).zip"; \
+		echo "$(XSPEC_SHA256)  $(XSPEC_ZIP)" | shasum -a 256 -c -; \
+		unzip -q -o "$(XSPEC_ZIP)" -d "$(TOOLS_DIR)/"; \
 		chmod +x "$(XSPEC)"; \
-		rm .tools/xspec.zip; \
+		rm "$(XSPEC_ZIP)"; \
 	fi
 
 # Download Saxon-HE + xmlresolver into .tools/. Skip entirely when Homebrew
@@ -78,42 +116,23 @@ install-saxon:
 	@if [ -n "$(BREW_SAXON)" ]; then \
 		echo "==> Saxon available via Homebrew at $(BREW_SAXON), skipping download"; \
 	else \
-		mkdir -p .tools; \
-		if [ ! -f "$(SAXON_LOCAL)" ]; then \
-			echo "==> Downloading Saxon-HE $(SAXON_VERSION) into .tools/"; \
-			curl -fsSL -o "$(SAXON_LOCAL)" \
-				"https://repo1.maven.org/maven2/net/sf/saxon/Saxon-HE/$(SAXON_VERSION)/Saxon-HE-$(SAXON_VERSION).jar"; \
-			echo "$(SAXON_SHA256)  $(SAXON_LOCAL)" | shasum -a 256 -c -; \
-		fi; \
-		if [ ! -f "$(XMLRESOLVER_LOCAL)" ]; then \
-			echo "==> Downloading xmlresolver $(XMLRESOLVER_VERSION) into .tools/"; \
-			curl -fsSL -o "$(XMLRESOLVER_LOCAL)" \
-				"https://repo1.maven.org/maven2/org/xmlresolver/xmlresolver/$(XMLRESOLVER_VERSION)/xmlresolver-$(XMLRESOLVER_VERSION).jar"; \
-			echo "$(XMLRESOLVER_SHA256)  $(XMLRESOLVER_LOCAL)" | shasum -a 256 -c -; \
-		fi; \
+		$(call download_checked,$(SAXON_LOCAL),Saxon-HE $(SAXON_VERSION),$(SAXON_URL),$(SAXON_SHA256)); \
+		$(call download_checked,$(XMLRESOLVER_LOCAL),xmlresolver $(XMLRESOLVER_VERSION),$(XMLRESOLVER_URL),$(XMLRESOLVER_SHA256)); \
 	fi
 
 # Run every test/*.xspec. install-saxon is a no-op if SAXON_CP already resolves
 # to a real jar (e.g. via `brew install saxon`).
 test: install-xspec install-saxon
-	@if [ -z "$(XSPEC_TESTS)" ]; then echo "no xspec tests found in test/"; exit 1; fi
-	@if [ -z "$$SAXON_CP" ]; then \
-		echo "ERROR: SAXON_CP could not be resolved."; \
-		echo "  Try: brew install saxon  (or)  make install-saxon"; \
-		exit 1; \
-	fi
-	@set -e; for t in $(XSPEC_TESTS); do echo "==> $$t"; "$(XSPEC)" "$$t"; done
+	$(require_xspec_tests)
+	$(require_saxon_cp)
+	$(call run_xspec)
 
 # Run every test/*.xspec and emit XSpec's XSLT coverage reports. Reports are
 # written next to the normal XSpec reports as test/xspec/*-coverage.{xml,html}.
 test-coverage: install-xspec install-saxon
-	@if [ -z "$(XSPEC_TESTS)" ]; then echo "no xspec tests found in test/"; exit 1; fi
-	@if [ -z "$$SAXON_CP" ]; then \
-		echo "ERROR: SAXON_CP could not be resolved."; \
-		echo "  Try: brew install saxon  (or)  make install-saxon"; \
-		exit 1; \
-	fi
-	@set -e; for t in $(XSPEC_TESTS); do echo "==> $$t"; "$(XSPEC)" -c "$$t"; done
+	$(require_xspec_tests)
+	$(require_saxon_cp)
+	$(call run_xspec,-c)
 
 # Short alias for local coverage checks.
 coverage: test-coverage
@@ -121,14 +140,14 @@ coverage: test-coverage
 # Drop the per-run xspec artefacts (compiled stylesheets, HTML reports,
 # coverage XML/HTML reports).
 test-clean:
-	rm -rf test/xspec
+	rm -rf $(TEST_DIR)/xspec
 
 # Local mirror of the CI smoke-test job. Fetches the W3C XSD-of-XSDs (the
 # canonical real-world payload), renders it through xsdstyle.xsl with Saxon,
 # then validates the HTML/CSS with vnu.jar — same steps as .github/workflows/ci.yml.
-SMOKE_SCHEMAS := .tools/schemas
+SMOKE_SCHEMAS := $(TOOLS_DIR)/schemas
 SMOKE_OUT     := out
-VNU_JAR       := .tools/vnu.jar
+VNU_JAR       := $(TOOLS_DIR)/vnu.jar
 VNU_URL       := https://github.com/validator/validator/releases/download/latest/vnu.jar
 
 # Cache the W3C XSD-of-XSDs + DTDs under .tools/schemas/ for the smoke test.
@@ -137,18 +156,18 @@ install-sample-schemas:
 	@if [ ! -f $(SMOKE_SCHEMAS)/XMLSchema.xsd ]; then \
 		echo "==> Fetching W3C XMLSchema.xsd + DTDs into $(SMOKE_SCHEMAS)/"; \
 		mkdir -p $(SMOKE_SCHEMAS); \
-		curl -fsSL -o $(SMOKE_SCHEMAS)/XMLSchema.xsd https://www.w3.org/2001/XMLSchema.xsd; \
-		curl -fsSL -o $(SMOKE_SCHEMAS)/XMLSchema.dtd https://www.w3.org/2001/XMLSchema.dtd; \
-		curl -fsSL -o $(SMOKE_SCHEMAS)/datatypes.dtd https://www.w3.org/2001/datatypes.dtd; \
-		curl -fsSL -o $(SMOKE_SCHEMAS)/xml.xsd       https://www.w3.org/2001/xml.xsd; \
+		$(CURL) -o $(SMOKE_SCHEMAS)/XMLSchema.xsd https://www.w3.org/2001/XMLSchema.xsd; \
+		$(CURL) -o $(SMOKE_SCHEMAS)/XMLSchema.dtd https://www.w3.org/2001/XMLSchema.dtd; \
+		$(CURL) -o $(SMOKE_SCHEMAS)/datatypes.dtd https://www.w3.org/2001/datatypes.dtd; \
+		$(CURL) -o $(SMOKE_SCHEMAS)/xml.xsd       https://www.w3.org/2001/xml.xsd; \
 	fi
 
 # Download the Nu HTML Checker into .tools/. No-op once the jar is present.
 install-vnu:
 	@if [ ! -f $(VNU_JAR) ]; then \
-		echo "==> Downloading vnu.jar into .tools/"; \
-		mkdir -p .tools; \
-		curl -fsSL -o $(VNU_JAR) $(VNU_URL); \
+		echo "==> Downloading vnu.jar into $(TOOLS_DIR)/"; \
+		mkdir -p "$(TOOLS_DIR)"; \
+		$(CURL) -o $(VNU_JAR) $(VNU_URL); \
 	fi
 
 # Render an arbitrary XSD to HTML. Usage: make render SCHEMA=path/to/schema.xsd
@@ -165,19 +184,15 @@ render: install-saxon
 		echo "ERROR: schema not found: $(SCHEMA)"; \
 		exit 1; \
 	fi
-	@if [ -z "$$SAXON_CP" ]; then \
-		echo "ERROR: SAXON_CP could not be resolved."; \
-		echo "  Try: brew install saxon  (or)  make install-saxon"; \
-		exit 1; \
-	fi
+	$(require_saxon_cp)
 	@mkdir -p $(RENDER_OUT)
 	@echo "==> Rendering $(SCHEMA) -> $(RENDER_OUT)/$(RENDER_HTML)"
 	java -cp "$$SAXON_CP" net.sf.saxon.Transform \
 		-s:$(SCHEMA) \
-		-xsl:xsdstyle.xsl \
+		-xsl:$(XSL) \
 		-o:$(RENDER_OUT)/$(RENDER_HTML)
 	@rm -rf $(RENDER_OUT)/assets
-	@cp -R assets $(RENDER_OUT)/assets
+	@cp -R $(ASSETS_DIR) $(RENDER_OUT)/assets
 
 # smoke-test = render the W3C XSD-of-XSDs, then validate the output via vnu.jar.
 smoke-test: SCHEMA      = $(SMOKE_SCHEMAS)/XMLSchema.xsd

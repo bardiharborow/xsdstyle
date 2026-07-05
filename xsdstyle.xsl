@@ -11,6 +11,27 @@
   expand-text="yes">
   <xsl:output method="html" html-version="5" encoding="UTF-8" indent="yes" />
 
+  <!--
+    Internal map:
+    1. Public boundary and static catalogs
+    2. Icons and localization
+    3. Configuration, naming, and identity helpers
+    4. Schema collection and component identity
+    5. QName and reference resolution
+    6. Indexes
+    7. Page shell rendering
+    8. Overview and component rendering
+    9. Detail tables and inline models
+    10. Attribute expansion and particle rendering
+    11. References, annotations, and documentation markup
+    12. Diagnostics
+    13. Source pretty-printer
+  -->
+
+  <!-- =================================================================== -->
+  <!-- 1. Public Boundary And Static Catalogs                              -->
+  <!-- =================================================================== -->
+
   <xsl:param name="page-title" as="xs:string?" select="()" />
   <xsl:param name="asset-base-uri" as="xs:string" select="'./assets/'" />
   <xsl:param name="show-source" as="xs:boolean" select="true()" />
@@ -108,6 +129,10 @@
      'pattern', 'enumeration', 'whiteSpace', 'maxInclusive', 'maxExclusive',
      'minInclusive', 'minExclusive', 'totalDigits', 'fractionDigits',
      'explicitTimezone')" />
+
+  <!-- =================================================================== -->
+  <!-- 2. Icons And Localization                                           -->
+  <!-- =================================================================== -->
 
   <!--
     Icon SVGs live as standalone files under assets/ (next to this stylesheet)
@@ -209,6 +234,8 @@
           <xsl:map-entry key="'schema.status.loaded'" select="'loaded'" />
           <xsl:map-entry key="'schema.status.notLoaded'" select="'not loaded'" />
           <xsl:map-entry key="'schema.status.notRequested'" select="'not requested'" />
+          <xsl:map-entry key="'schema.status.notSchema'" select="'not schema'" />
+          <xsl:map-entry key="'schema.status.cycleSkipped'" select="'cycle skipped'" />
           <xsl:map-entry key="'msg.noTargetNamespace'" select="'no target namespace'" />
           <xsl:map-entry key="'msg.anonymous'" select="'anonymous'" />
           <xsl:map-entry key="'msg.yes'" select="'yes'" />
@@ -488,6 +515,10 @@
     </xsl:iterate>
   </xsl:function>
 
+  <!-- =================================================================== -->
+  <!-- 3. Configuration, Naming, And Identity Helpers                      -->
+  <!-- =================================================================== -->
+
   <xsl:function name="f:coalesce-string" as="xs:string">
     <xsl:param name="values" as="xs:string*" />
     <xsl:sequence select="($values[normalize-space(.) ne ''][1], '')[1]" />
@@ -571,6 +602,10 @@
       select="if (exists($qname)) then concat('{', namespace-uri-from-QName($qname), '}', local-name-from-QName($qname)) else ''" />
   </xsl:function>
 
+  <!-- =================================================================== -->
+  <!-- 4. Schema Collection And Component Identity                         -->
+  <!-- =================================================================== -->
+
   <xsl:function name="f:doc-uri" as="xs:string">
     <xsl:param name="schema" as="element(xs:schema)" />
     <xsl:sequence
@@ -589,7 +624,7 @@
 
   <xsl:function name="f:composition-edges" as="element()*">
     <xsl:param name="schema" as="element(xs:schema)" />
-    <xsl:sequence select="$schema/(xs:include | xs:import | xs:redefine | xs:override)[@schemaLocation]" />
+    <xsl:sequence select="$schema/(xs:include | xs:import | xs:redefine | xs:override)" />
   </xsl:function>
 
   <xsl:function name="f:composition-child-ns" as="xs:string">
@@ -669,6 +704,68 @@
     <xsl:choose>
       <xsl:when test="$key = $visited" />
       <xsl:otherwise>
+        <xsl:variable name="next-visited" select="($visited, $key)" />
+        <xsl:variable name="edges" as="map(*)*">
+          <xsl:for-each select="f:composition-edges($schema)">
+            <xsl:variable name="edge" select="." />
+            <xsl:variable name="resolved" select="f:absolute-uri(string($edge/@schemaLocation), base-uri($edge))" />
+            <xsl:choose>
+              <xsl:when test="empty($resolved)">
+                <xsl:sequence
+                  select="map {
+                  'relation': local-name($edge),
+                  'declared-namespace': string($edge/@namespace),
+                  'schema-location': string($edge/@schemaLocation),
+                  'resolved-uri': (),
+                  'source-node': $edge,
+                  'status': 'not-requested'
+                }" />
+              </xsl:when>
+              <xsl:when test="not(doc-available($resolved))">
+                <xsl:sequence
+                  select="map {
+                  'relation': local-name($edge),
+                  'declared-namespace': string($edge/@namespace),
+                  'schema-location': string($edge/@schemaLocation),
+                  'resolved-uri': $resolved,
+                  'source-node': $edge,
+                  'status': 'not-loaded'
+                }" />
+              </xsl:when>
+              <xsl:otherwise>
+                <xsl:variable name="loaded" select="doc($resolved)/*" />
+                <xsl:choose>
+                  <xsl:when test="not($loaded/self::xs:schema)">
+                    <xsl:sequence
+                      select="map {
+                      'relation': local-name($edge),
+                      'declared-namespace': string($edge/@namespace),
+                      'schema-location': string($edge/@schemaLocation),
+                      'resolved-uri': $resolved,
+                      'source-node': $edge,
+                      'target-node': $loaded,
+                      'status': 'not-schema'
+                    }" />
+                  </xsl:when>
+                  <xsl:otherwise>
+                    <xsl:variable name="child-ns" select="f:composition-child-ns($loaded, $edge, $effective-ns)" />
+                    <xsl:sequence
+                      select="map {
+                      'relation': local-name($edge),
+                      'declared-namespace': string($edge/@namespace),
+                      'schema-location': string($edge/@schemaLocation),
+                      'resolved-uri': $resolved,
+                      'source-node': $edge,
+                      'target-node': $loaded,
+                      'effective-target-namespace': $child-ns,
+                      'status': if (concat(f:doc-uri($loaded), '|', $child-ns) = $next-visited) then 'cycle-skipped' else 'loaded'
+                    }" />
+                  </xsl:otherwise>
+                </xsl:choose>
+              </xsl:otherwise>
+            </xsl:choose>
+          </xsl:for-each>
+        </xsl:variable>
         <xsl:sequence
           select="map {
           'uri': $uri,
@@ -677,18 +774,11 @@
           'effective-target-namespace': $effective-ns,
           'is-primary': empty($visited),
           'is-chameleon': not($schema/@targetNamespace),
-          'load-status': 'loaded'
+          'load-status': 'loaded',
+          'outgoing-edges': $edges
         }" />
-        <xsl:for-each select="f:composition-edges($schema)">
-          <xsl:variable name="edge" select="." />
-          <xsl:variable name="resolved" select="f:absolute-uri(string($edge/@schemaLocation), base-uri($edge))" />
-          <xsl:if test="$resolved and doc-available($resolved)">
-            <xsl:variable name="loaded" select="doc($resolved)/*" />
-            <xsl:if test="$loaded/self::xs:schema">
-              <xsl:variable name="child-ns" select="f:composition-child-ns($loaded, $edge, $effective-ns)" />
-              <xsl:sequence select="f:collect-schemas($loaded, $child-ns, ($visited, $key))" />
-            </xsl:if>
-          </xsl:if>
+        <xsl:for-each select="$edges[?status = 'loaded']">
+          <xsl:sequence select="f:collect-schemas(?target-node, ?effective-target-namespace, $next-visited)" />
         </xsl:for-each>
       </xsl:otherwise>
     </xsl:choose>
@@ -767,6 +857,10 @@
       select="$node/ancestor-or-self::*[$top intersect ancestor::*] ! string(count(preceding-sibling::*) + 1)" />
     <xsl:sequence select="string-join((f:anchor($top, $schemas), $steps), '-')" />
   </xsl:function>
+
+  <!-- =================================================================== -->
+  <!-- 5. QName And Reference Resolution                                   -->
+  <!-- =================================================================== -->
 
   <xsl:function name="f:qname" as="xs:QName?">
     <xsl:param name="lexical" as="xs:string?" />
@@ -1254,77 +1348,88 @@
       or exists($node//@xpathDefaultNamespace | $node//@defaultAttributes | $node//@defaultAttributesApply | $node//@inheritable | $node//@notNamespace | $node//@notQName)" />
   </xsl:function>
 
+  <!-- =================================================================== -->
+  <!-- 6. Indexes                                                          -->
+  <!-- =================================================================== -->
+
+  <xsl:function name="f:first-reference-attribute" as="attribute()?">
+    <xsl:param name="node" as="element()" />
+    <xsl:param name="names" as="xs:string*" />
+    <xsl:sequence select="(for $name in $names return $node/@*[local-name() = $name])[1]" />
+  </xsl:function>
+
+  <!--
+    Reverse-reference index keyed by the Clark QName that each node's authored
+    reference resolves to. Values stay as source nodes so renderers can keep
+    source order, owner lookup, annotations, and local context intact.
+  -->
+  <xsl:function name="f:reference-index" as="map(*)">
+    <xsl:param name="nodes" as="element()*" />
+    <xsl:param name="attribute-names" as="xs:string+" />
+    <xsl:param name="expected" as="xs:string" />
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence
+      select="
+      map:merge(
+        for $n in $nodes
+        return
+          let $attr := f:first-reference-attribute($n, $attribute-names)
+          return
+            if (exists($attr)) then
+              map:entry(
+                f:clark(f:reference-qname(string($attr), $n, $expected, $schemas)),
+                $n)
+            else
+              (),
+        map { 'duplicates': 'combine' })" />
+  </xsl:function>
+
+  <xsl:function name="f:type-users-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence
+      select="f:reference-index($schemas ! ?node//*[@type or @base or @itemType], ('type', 'base', 'itemType'), 'type', $schemas)" />
+  </xsl:function>
+
+  <xsl:function name="f:keyref-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence select="f:reference-index($schemas ! ?node//xs:keyref[@refer], ('refer'), '', $schemas)" />
+  </xsl:function>
+
+  <xsl:function name="f:element-ref-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence select="f:reference-index($schemas ! ?node//xs:element[@ref], ('ref'), 'element', $schemas)" />
+  </xsl:function>
+
+  <xsl:function name="f:group-ref-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence select="f:reference-index($schemas ! ?node//xs:group[@ref], ('ref'), 'group', $schemas)" />
+  </xsl:function>
+
+  <xsl:function name="f:attribute-group-ref-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence
+      select="f:reference-index($schemas ! ?node//xs:attributeGroup[@ref], ('ref'), 'attributeGroup', $schemas)" />
+  </xsl:function>
+
+  <xsl:function name="f:attribute-ref-index" as="map(*)">
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:sequence select="f:reference-index($schemas ! ?node//xs:attribute[@ref], ('ref'), 'attribute', $schemas)" />
+  </xsl:function>
+
+  <!-- =================================================================== -->
+  <!-- 7. Page Shell Rendering                                             -->
+  <!-- =================================================================== -->
+
   <xsl:template match="/xs:schema">
     <xsl:variable name="config" select="f:config()" />
     <xsl:variable name="schemas" select="f:collect-schemas(., string(@targetNamespace), ())" />
     <xsl:variable name="components" select="f:component-nodes($schemas)" />
-    <!--
-      Reverse-reference indexes, built once over the whole schema set so each
-      per-component "See also" section is an O(1) map lookup instead of a fresh
-      full-document scan per component (architecture.md: renderers consult
-      indexes, they do not re-scan raw nodes). Keys are the Clark name of the
-      referenced component; values are the referencing nodes in document order.
-    -->
-    <xsl:variable
-      name="type-users-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//*[@type or @base or @itemType]
-        return map:entry(
-          f:clark(f:reference-qname(string(($n/@type | $n/@base | $n/@itemType)[1]), $n, 'type', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
-    <xsl:variable
-      name="keyref-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//xs:keyref[@refer]
-        return map:entry(
-          f:clark(f:reference-qname(string($n/@refer), $n, '', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
-    <xsl:variable
-      name="element-ref-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//xs:element[@ref]
-        return map:entry(
-          f:clark(f:reference-qname(string($n/@ref), $n, 'element', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
-    <xsl:variable
-      name="group-ref-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//xs:group[@ref]
-        return map:entry(
-          f:clark(f:reference-qname(string($n/@ref), $n, 'group', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
-    <xsl:variable
-      name="attribute-group-ref-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//xs:attributeGroup[@ref]
-        return map:entry(
-          f:clark(f:reference-qname(string($n/@ref), $n, 'attributeGroup', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
-    <xsl:variable
-      name="attribute-ref-index"
-      as="map(*)"
-      select="
-      map:merge(
-        for $n in $schemas ! ?node//xs:attribute[@ref]
-        return map:entry(
-          f:clark(f:reference-qname(string($n/@ref), $n, 'attribute', $schemas)),
-          $n),
-        map { 'duplicates': 'combine' })" />
+    <xsl:variable name="type-users-index" as="map(*)" select="f:type-users-index($schemas)" />
+    <xsl:variable name="keyref-index" as="map(*)" select="f:keyref-index($schemas)" />
+    <xsl:variable name="element-ref-index" as="map(*)" select="f:element-ref-index($schemas)" />
+    <xsl:variable name="group-ref-index" as="map(*)" select="f:group-ref-index($schemas)" />
+    <xsl:variable name="attribute-group-ref-index" as="map(*)" select="f:attribute-group-ref-index($schemas)" />
+    <xsl:variable name="attribute-ref-index" as="map(*)" select="f:attribute-ref-index($schemas)" />
     <xsl:variable name="unresolved-refs" as="attribute()*" select="f:unresolved-refs($schemas)" />
     <xsl:variable
       name="derived-title"
@@ -1508,6 +1613,10 @@
       </body>
     </html>
   </xsl:template>
+
+  <!-- =================================================================== -->
+  <!-- 8. Overview And Component Rendering                                 -->
+  <!-- =================================================================== -->
 
   <xsl:template name="overview">
     <xsl:param name="title" as="xs:string" />
@@ -1724,28 +1833,34 @@
                 class="schema-row__status">{f:t(concat('schema.status.', if ($record?load-status = 'not-loaded') then 'notLoaded' else if ($record?load-status = 'not-requested') then 'notRequested' else 'loaded'))}</span>
             </div>
           </xsl:for-each>
-          <xsl:for-each select="$schemas ! ?node/(xs:include | xs:import | xs:redefine | xs:override)">
-            <xsl:variable name="declaring-schema" select="ancestor::xs:schema[1]" />
-            <div
-              class="schema-row"
-              id="schema-edge-{position()}"
-              data-status="{if (@schemaLocation and doc-available(f:absolute-uri(string(@schemaLocation), base-uri(.)))) then 'loaded' else if (@schemaLocation) then 'not-loaded' else 'not-requested'}">
+          <xsl:for-each select="$schemas ! ?outgoing-edges">
+            <xsl:variable name="edge" select="." />
+            <xsl:variable name="source-node" select="$edge?source-node" />
+            <xsl:variable name="declaring-schema" select="$source-node/ancestor::xs:schema[1]" />
+            <div class="schema-row" id="schema-edge-{position()}" data-status="{$edge?status}">
               <span class="schema-row__in">{f:t('schema.in')} <code
                 dir="ltr">{f:relativize(f:doc-uri($declaring-schema), f:primary-base($schemas))}</code></span>
-              <span class="schema-row__rel" data-rel="{local-name()}">{local-name()}</span>
+              <span class="schema-row__rel" data-rel="{$edge?relation}">{$edge?relation}</span>
               <span
-                class="schema-row__uri">{if (@schemaLocation) then string(@schemaLocation) else f:t('schema.noSchemaLocation')}</span>
+                class="schema-row__uri">{if ($edge?schema-location ne '') then $edge?schema-location else f:t('schema.noSchemaLocation')}</span>
               <span
-                class="schema-row__declared-ns">{f:t('schema.namespace')} {if (@namespace) then string(@namespace) else f:t('schema.none')}</span>
-              <xsl:variable name="edge-uri" select="f:absolute-uri(string(@schemaLocation), base-uri(.))" />
-              <xsl:if test="@schemaLocation and doc-available($edge-uri) and doc($edge-uri)/*/@version">
+                class="schema-row__declared-ns">{f:t('schema.namespace')} {if ($edge?declared-namespace ne '') then $edge?declared-namespace else f:t('schema.none')}</span>
+              <xsl:if test="$edge?target-node/@version">
                 <span class="schema-row__version">{f:t('field.version')}: <code dir="ltr">
-                  <bdi>{doc($edge-uri)/*/@version}</bdi>
+                  <bdi>{$edge?target-node/@version}</bdi>
                 </code></span>
               </xsl:if>
-              <span
-                class="schema-row__status">{f:t(concat('schema.status.', if (@schemaLocation and doc-available($edge-uri)) then 'loaded' else if (@schemaLocation) then 'notLoaded' else 'notRequested'))}</span>
-              <xsl:apply-templates select="xs:annotation" mode="annotation">
+              <span class="schema-row__status">{f:t(
+                concat(
+                  'schema.status.',
+                  if ($edge?status = 'not-loaded') then 'notLoaded'
+                  else if ($edge?status = 'not-requested') then 'notRequested'
+                  else if ($edge?status = 'cycle-skipped') then 'cycleSkipped'
+                  else if ($edge?status = 'not-schema') then 'notSchema'
+                  else 'loaded'
+                )
+              )}</span>
+              <xsl:apply-templates select="$source-node/xs:annotation" mode="annotation">
                 <xsl:with-param name="config" select="$config" tunnel="yes" />
               </xsl:apply-templates>
             </div>
@@ -2023,6 +2138,10 @@
       </section>
     </xsl:if>
   </xsl:template>
+
+  <!-- =================================================================== -->
+  <!-- 9. Detail Tables And Inline Models                                  -->
+  <!-- =================================================================== -->
 
   <xsl:template name="element-detail">
     <xsl:param name="node" as="element(xs:element)" />
@@ -3239,6 +3358,10 @@
     </xsl:choose>
   </xsl:template>
 
+  <!-- =================================================================== -->
+  <!-- 10. Attribute Expansion And Particle Rendering                       -->
+  <!-- =================================================================== -->
+
   <xsl:template name="attribute-use-row">
     <xsl:param name="attr" as="element(xs:attribute)" />
     <xsl:param name="schemas" as="map(*)*" />
@@ -3713,6 +3836,10 @@
     </div>
   </xsl:template>
 
+  <!-- =================================================================== -->
+  <!-- 11. References, Annotations, And Documentation Markup                -->
+  <!-- =================================================================== -->
+
   <xsl:template name="render-reference">
     <xsl:param name="lexical" as="xs:string?" />
     <xsl:param name="context" as="element()" />
@@ -3871,51 +3998,28 @@
     </xsl:choose>
   </xsl:template>
 
+  <!-- =================================================================== -->
+  <!-- 12. Diagnostics                                                     -->
+  <!-- =================================================================== -->
+
   <!--
-    Collection-time diagnostics. Replays the f:collect-schemas graph walk and
-    emits a record per problem edge: schema-not-loaded (the schemaLocation does
-    not resolve to an available document), not-schema (the document loads but
-    its root is not xs:schema), and traversal-cycle-skipped (the target was
-    already on the current ancestral path, so collection stopped to avoid a
-    cycle). The visited-key logic mirrors f:collect-schemas exactly.
+    Collection-time diagnostics are derived from collection edge records. The
+    collection walk has already resolved each composition declaration and
+    assigned a status, so diagnostics should not replay loading or traversal.
   -->
   <xsl:function name="f:collection-diagnostics" as="map(*)*">
-    <xsl:param name="schema" as="element(xs:schema)" />
-    <xsl:param name="effective-ns" as="xs:string" />
-    <xsl:param name="visited" as="xs:string*" />
-    <xsl:variable name="key" select="concat(f:doc-uri($schema), '|', $effective-ns)" />
-    <xsl:if test="not($key = $visited)">
-      <xsl:for-each select="f:composition-edges($schema)">
-        <xsl:variable name="edge" select="." />
-        <xsl:variable name="resolved" select="f:absolute-uri(string($edge/@schemaLocation), base-uri($edge))" />
-        <xsl:choose>
-          <xsl:when test="empty($resolved)" />
-          <xsl:when test="not(doc-available($resolved))">
-            <xsl:sequence select="map { 'code': 'schema-not-loaded', 'severity': 'warning', 'node': $edge }" />
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:variable name="loaded" select="doc($resolved)/*" />
-            <xsl:choose>
-              <xsl:when test="not($loaded/self::xs:schema)">
-                <xsl:sequence select="map { 'code': 'not-schema', 'severity': 'warning', 'node': $edge }" />
-              </xsl:when>
-              <xsl:otherwise>
-                <xsl:variable name="child-ns" select="f:composition-child-ns($loaded, $edge, $effective-ns)" />
-                <xsl:choose>
-                  <xsl:when test="concat(f:doc-uri($loaded), '|', $child-ns) = ($visited, $key)">
-                    <xsl:sequence
-                      select="map { 'code': 'traversal-cycle-skipped', 'severity': 'info', 'node': $edge }" />
-                  </xsl:when>
-                  <xsl:otherwise>
-                    <xsl:sequence select="f:collection-diagnostics($loaded, $child-ns, ($visited, $key))" />
-                  </xsl:otherwise>
-                </xsl:choose>
-              </xsl:otherwise>
-            </xsl:choose>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:for-each>
-    </xsl:if>
+    <xsl:param name="schemas" as="map(*)*" />
+    <xsl:for-each select="$schemas ! ?outgoing-edges[?status = ('not-loaded', 'not-schema', 'cycle-skipped')]">
+      <xsl:sequence
+        select="map {
+        'code':
+          if (?status = 'not-loaded') then 'schema-not-loaded'
+          else if (?status = 'not-schema') then 'not-schema'
+          else 'traversal-cycle-skipped',
+        'severity': if (?status = 'cycle-skipped') then 'info' else 'warning',
+        'node': ?source-node
+      }" />
+    </xsl:for-each>
   </xsl:function>
 
   <!-- Top-level group / attributeGroup definitions that $def references by @ref. -->
@@ -4031,10 +4135,7 @@
     <xsl:param name="components" as="element()*" />
     <xsl:param name="config" as="map(*)" />
     <xsl:param name="unresolved" as="attribute()*" select="f:unresolved-refs($schemas)" />
-    <xsl:variable name="primary" select="($schemas[?is-primary], $schemas)[1]?node" />
-    <xsl:variable
-      name="collection"
-      select="if (exists($primary)) then f:collection-diagnostics($primary, string($primary/@targetNamespace), ()) else ()" />
+    <xsl:variable name="collection" select="f:collection-diagnostics($schemas)" />
     <xsl:variable
       name="unknown"
       select="$schemas ! ?node/descendant::*[namespace-uri() = $xsd-ns and not(local-name() = $xsd-elements) and not(ancestor::xs:appinfo or ancestor::xs:documentation)]" />
@@ -4110,6 +4211,10 @@
       </section>
     </xsl:if>
   </xsl:template>
+
+  <!-- =================================================================== -->
+  <!-- 13. Source Pretty-Printer                                           -->
+  <!-- =================================================================== -->
 
   <!--
     Namespace pruning for source listings: a fragment root re-declares only the

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Security-sensitive helper tests for URL sanitisation.
+
+  Run via `make test` or `make test XSPEC_TESTS=test/security-helpers.xspec`.
+-->
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:f="urn:xsdoc:functions"
+  stylesheet="../xsdstyle.xsl">
+  <x:scenario label="f:safe-href — URL scheme filtering">
+    <x:scenario label="https passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'https://example.org/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'https://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="javascript: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'javascript:alert(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="case and whitespace bypass is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'  JavaScript:alert(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="data: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'data:text/html,x'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="vbscript: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'vbscript:msgbox(1)'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="file: is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'file:///etc/passwd'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="a relative path passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'../other/schema.xsd'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'../other/schema.xsd'" />
+    </x:scenario>
+    <x:scenario label="a same-document fragment passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'#el-ns1-Foo'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'#el-ns1-Foo'" />
+    </x:scenario>
+    <x:scenario label="http passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'http://example.org/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'http://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="mailto passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'mailto:a@example.org'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'mailto:a@example.org'" />
+    </x:scenario>
+    <x:scenario label="tel passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'tel:+15551234'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'tel:+15551234'" />
+    </x:scenario>
+    <x:scenario label="ftp passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'ftp://example.org/pub/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'ftp://example.org/pub/x'" />
+    </x:scenario>
+    <x:scenario label="ftps passes through">
+      <x:call function="f:safe-href">
+        <x:param select="'ftps://example.org/pub/x'" />
+      </x:call>
+      <x:expect label="returned verbatim" select="'ftps://example.org/pub/x'" />
+    </x:scenario>
+    <x:scenario label="blob: is rejected (allowlist, not denylist)">
+      <x:call function="f:safe-href">
+        <x:param select="'blob:https://example.org/uuid'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="an unknown app scheme is rejected">
+      <x:call function="f:safe-href">
+        <x:param select="'intent://scan/#Intent;scheme=x;end'" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+    <x:scenario label="ASCII whitespace is stripped from an allowed URL">
+      <x:call function="f:safe-href">
+        <x:param select="'https://example.org/ x'" />
+      </x:call>
+      <x:expect label="stripped, returned" select="'https://example.org/x'" />
+    </x:scenario>
+    <x:scenario label="empty input yields empty">
+      <x:call function="f:safe-href">
+        <x:param select="''" />
+      </x:call>
+      <x:expect label="empty" select="()" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

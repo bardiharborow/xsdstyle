@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Unit tests for message lookup and placeholder substitution.
+
+  Generated chrome wiring is covered by i18n.xspec; this file keeps pure
+  message-catalog helper behaviour out of the generic helper suite.
+
+  Run via `make test` or `make test XSPEC_TESTS=test/i18n-helpers.xspec`.
+-->
+<x:description
+  xmlns:x="http://www.jenitennison.com/xslt/xspec"
+  xmlns:f="urn:xsdoc:functions"
+  stylesheet="../xsdstyle.xsl">
+  <x:scenario label="f:t — message catalog lookup">
+    <x:scenario label="a known key returns its English value">
+      <x:call function="f:t">
+        <x:param select="'diag.heading'" />
+      </x:call>
+      <x:expect label="English value" select="'Diagnostics'" />
+    </x:scenario>
+    <x:scenario label="a missing key renders the visible sentinel">
+      <x:call function="f:t">
+        <x:param select="'no.such.key'" />
+      </x:call>
+      <x:expect label="sentinel" select="'[[no.such.key]]'" />
+    </x:scenario>
+    <x:scenario label="schema-row chrome keys exist">
+      <x:call function="f:t">
+        <x:param select="'schema.rel.primary'" />
+      </x:call>
+      <x:expect label="primary" select="'primary'" />
+    </x:scenario>
+    <x:scenario label="edge status keys exist">
+      <x:call function="f:t">
+        <x:param select="'schema.status.notLoaded'" />
+      </x:call>
+      <x:expect label="not loaded" select="'not loaded'" />
+    </x:scenario>
+    <x:scenario label="see-also relation phrase keys exist">
+      <x:call function="f:t">
+        <x:param select="'seeAlso.as'" />
+      </x:call>
+      <x:expect label="as" select="'as'" />
+    </x:scenario>
+    <x:scenario label="versioning note key exists">
+      <x:call function="f:t">
+        <x:param select="'versioning.note'" />
+      </x:call>
+      <x:expect
+        label="note text"
+        select="'Documentation shows the source annotations and does not apply conditional inclusion filtering by default.'" />
+    </x:scenario>
+    <x:scenario label="diagnostic context segment keys exist">
+      <x:call function="f:t">
+        <x:param select="'diag.ctxNotRecognized'" />
+      </x:call>
+      <x:expect label="segment" select="'is not a recognized XSD construct.'" />
+    </x:scenario>
+    <x:scenario label="value constraint keys exist">
+      <x:call function="f:t">
+        <x:param select="'value.default'" />
+      </x:call>
+      <x:expect label="default" select="'default'" />
+    </x:scenario>
+    <x:scenario label="boolean display keys exist">
+      <x:call function="f:t">
+        <x:param select="'msg.yes'" />
+      </x:call>
+      <x:expect label="yes" select="'yes'" />
+    </x:scenario>
+    <x:scenario label="wildcard row header keys exist">
+      <x:call function="f:t">
+        <x:param select="'wildcard.anyAttribute'" />
+      </x:call>
+      <x:expect label="anyAttribute" select="'anyAttribute'" />
+    </x:scenario>
+    <x:scenario label="inline marker key exists">
+      <x:call function="f:t">
+        <x:param select="'msg.anonymous'" />
+      </x:call>
+      <x:expect label="anonymous" select="'anonymous'" />
+    </x:scenario>
+    <x:scenario label="type alternative fallback key exists">
+      <x:call function="f:t">
+        <x:param select="'typeAlt.implicitFallback'" />
+      </x:call>
+      <x:expect label="fallback phrase" select="'implicit fallback to @type'" />
+    </x:scenario>
+    <x:scenario label="a parameterised key substitutes named placeholders">
+      <x:call function="f:t">
+        <x:param select="'facet.enumerationCount'" />
+        <x:param select="map { 'count': 12 }" />
+      </x:call>
+      <x:expect label="substituted count" select="'12 enumeration values'" />
+    </x:scenario>
+  </x:scenario>
+
+  <x:scenario label="f:format-message — placeholder substitution">
+    <x:scenario label="repeated placeholder substitutes every occurrence">
+      <x:call function="f:format-message">
+        <x:param select="'{a}-{a}-{b}'" />
+        <x:param select="map { 'a': 'x', 'b': 'y' }" />
+      </x:call>
+      <x:expect label="x-x-y" select="'x-x-y'" />
+    </x:scenario>
+    <x:scenario label="empty params leaves the template untouched">
+      <x:call function="f:format-message">
+        <x:param select="'no placeholders here'" />
+        <x:param select="map {}" />
+      </x:call>
+      <x:expect label="passthrough" select="'no placeholders here'" />
+    </x:scenario>
+    <x:scenario label="replacement-string metacharacters in a value are literal">
+      <x:call function="f:format-message">
+        <x:param select="'uri: {uri}'" />
+        <x:param select="map { 'uri': 'file:///c$/a\b' }" />
+      </x:call>
+      <x:expect label="dollar and backslash survive verbatim" select="'uri: file:///c$/a\b'" />
+    </x:scenario>
+  </x:scenario>
+</x:description>

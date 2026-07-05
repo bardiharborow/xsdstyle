@@ -15,11 +15,7 @@
   stylesheet="../xsdstyle.xsl"
   run-as="external">
   <x:scenario label="invalid parameter values are reported">
-    <x:context>
-      <xs:schema targetNamespace="urn:example">
-        <xs:element name="Foo" type="xs:string" />
-      </xs:schema>
-    </x:context>
+    <x:context href="fixtures/basic-element.xsd" />
     <x:param name="documentation-markup" select="'bogus'" />
     <x:expect
       label="an invalid-parameter diagnostic is emitted"
@@ -127,11 +123,7 @@
   </x:scenario>
 
   <x:scenario label="a clean schema produces no diagnostics section">
-    <x:context>
-      <xs:schema targetNamespace="urn:example">
-        <xs:element name="Foo" type="xs:string" />
-      </xs:schema>
-    </x:context>
+    <x:context href="fixtures/basic-element.xsd" />
     <x:expect label="no diagnostics section is rendered" test="empty($x:result//section[@id eq 'diagnostics'])" />
   </x:scenario>
 </x:description>

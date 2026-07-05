@@ -1,149 +1,174 @@
 # xsdstyle
 
-An Extensible Stylesheet Language Transformations (XSLT) stylesheet to generate
-documentation for XML Schema Definition (XSD) schemas.
+`xsdstyle` transforms an XSD 1.0 or XSD 1.1 schema collection into a single,
+static HTML documentation page. It follows `xs:include`, `xs:import`,
+`xs:redefine`, and `xs:override` links, documents global schema components,
+renders local constructs where they are used, and keeps unresolved or unloaded
+facts visible as diagnostics.
 
-## Use as a GitHub Action
+The distribution is intentionally small: one XSLT 3.0 stylesheet plus local
+CSS, JavaScript, and icon assets. The generated page does not require
+JavaScript to expose schema facts; JavaScript only adds progressive
+enhancements such as filtering, copy links, disclosure controls, and theme
+behavior.
 
-Render an XSD and publish the result in one workflow:
+## Features
 
-```yaml
-- uses: bardiharborow/xsdstyle@v1
-  with:
-    xsd-file: schemas/my-schema.xsd
-- uses: actions/upload-pages-artifact@v3
-  with:
-    path: out
+- Single-page HTML output suitable for local files, static hosting, or CI
+  artifacts.
+- Documentation for elements, complex types, simple types, attributes,
+  attribute groups, model groups, notations, annotations, identity constraints,
+  assertions, alternatives, wildcards, open content, and source fragments.
+- Transitive schema collection loading for imports, includes, redefines, and
+  overrides, including chameleon include effective namespaces.
+- Namespace-aware reference linking using resolved QNames rather than prefixes.
+- Visible diagnostics for failed schema loads, unresolved references, parameter
+  normalization, and skipped expansions.
+- Deterministic anchors and ordering for stable links and reproducible output.
+- Accessible semantic HTML with keyboard-operable controls and light/dark
+  color-scheme support.
+- Safe default handling for markup embedded in `xs:documentation`.
+
+## Quick Start
+
+Render a schema with the local Make target:
+
+```sh
+make render SCHEMA=path/to/schema.xsd
 ```
 
-The action runs in a container with Saxon-HE preinstalled, so it only works on
-Linux runners (`ubuntu-latest`, `ubuntu-24.04`, etc.).
+The generated site is written to `out/index.html`, with bundled assets copied
+to `out/assets/`.
 
-### Action inputs
-
-| Name                     | Required | Default      | Description                                                                                                                                           |
-| ------------------------ | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `xsd-file`               | yes      | —            | Path to the input `.xsd` file, relative to the workspace.                                                                                             |
-| `output-dir`             | no       | `out`        | Directory the generated site is written into.                                                                                                         |
-| `output-html`            | no       | `index.html` | Filename for the generated HTML page, inside `output-dir`.                                                                                            |
-| `page-title`             | no       | (see below)  | Page title.                                                                                                                                           |
-| `asset-base-uri`         | no       | `./assets/`  | URL prefix for `xsdstyle.css` and `xsdstyle.js`.                                                                                                      |
-| `show-source`            | no       | `true`       | Embed the raw XSD source per component.                                                                                                               |
-| `documentation-markup`   | no       | `safe`       | How to render HTML inside `xs:documentation` (`safe` or `permissive`).                                                                                |
-| `interface-language`     | no       | `en`         | BCP 47 language tag for the UI chrome. Drives `<html lang="…">` and the chrome translation lookup.                                                    |
-| `documentation-language` | no       | `en`         | BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on documentation wrappers when the XSD block has no per-block `xml:lang`. |
-| `interface-direction`    | no       | `auto`       | Writing direction for `<html dir="…">`. `auto` infers `rtl` from `interface-language`; or `ltr`/`rtl` explicit.                                       |
-| `robots-noindex`         | no       | `false`      | Emit `<meta name="robots" content="noindex">` in the generated page.                                                                                  |
-
-See [Parameters](#parameters) for the semantics of each one.
-
-### Action outputs
-
-| Name         | Description                                          |
-| ------------ | ---------------------------------------------------- |
-| `output-dir` | The directory containing `index.html` and `assets/`. |
-
-The container runs as root, so files written into the workspace are owned by
-root on the runner host. That is the GitHub Actions default for Docker actions
-and matches how `actions/checkout` and friends are usually consumed.
-
-## Manual usage
-
-`xsdstyle.xsl` is an XSLT 3.0 stylesheet. Install a compatible XSLT tool, such
-as Saxon, and run it against the XSD you want to document. Then copy the bundled
-CSS and JS next to the generated HTML:
+On macOS, Saxon can be provided by Homebrew:
 
 ```sh
 brew install saxon
-saxon -s:schema.xsd -xsl:xsdstyle.xsl -o:out/index.html
-cp -R assets out/assets
+make render SCHEMA=path/to/schema.xsd
 ```
 
-### Parameters
-
-Override with `-param:name=value` on the Saxon command line.
-
-- **`page-title`** (string) — Page title. Defaults to `@id`, then `Schema: {targetNamespace}`, then `XSD Documentation`.
-- **`asset-base-uri`** (string, default `./assets/`) — URL prefix for `xsdstyle.css` and `xsdstyle.js`. Set this when the assets live somewhere other than `./assets/`.
-- **`show-source`** (boolean, default `true`) — Embed the raw XSD source for each component. Set to `false` to drop the per-component source blocks.
-- **`documentation-markup`** (string, default `safe`) — How to render embedded HTML inside `xs:documentation`. `safe` applies an allowlist of tags and attributes; `href` values reject `javascript:`, `data:`, `vbscript:`, and `file:` schemes. `permissive` copies every element and attribute verbatim — only use this when every schema author is trusted, since the output can carry `<script>`, `on*=` handlers, etc.
-- **`interface-language`** (string, default `en`) — BCP 47 language tag for the UI chrome. Emitted as the `<html lang="…">` attribute on the generated page and selects which UI message catalog (sidebar headings, table column titles, button labels, occurrence tooltips, etc.) is used. Currently only `en` is bundled; unknown tags fall back to English. See [Localisation](#localisation) for adding a translation.
-- **`documentation-language`** (string, default `en`) — BCP 47 language tag for XSD-sourced prose. Emitted as a fallback `lang="…"` on `<xs:annotation>` / `<xs:documentation>` wrappers when the block has no per-block `xml:lang`. Per-block `xml:lang` on the XSD always wins for its own wrapper. This parameter does not affect chrome lookup or `<html lang>`.
-- **`interface-direction`** (string, default `auto`) — Writing direction emitted as the `<html dir="…">` attribute. `auto` resolves to `rtl` when `interface-language`'s primary subtag is one of `ar`, `he`, `fa`, `ur`, `ps`, `yi`, `dv`, `ug`, `ckb`, `sd`, `arc`, and to `ltr` otherwise. Pass `ltr` or `rtl` to override the inference. The stylesheet uses CSS logical properties throughout, so the chrome flips automatically; XSD source blocks stay LTR regardless.
-- **`robots-noindex`** (boolean, default `false`) — When `true`, emit `<meta name="robots" content="noindex">` in the page `<head>` so search engines skip indexing it. Useful for preview deployments, drafts, or internal-only schemas.
-
-Example with parameters:
+On other systems, or when Homebrew Saxon is not available, the Makefile vendors
+checksum-verified Saxon-HE and xmlresolver jars into `.tools/` automatically.
+You can also provide your own Saxon classpath:
 
 ```sh
-saxon \
-  -s:schema.xsd \
+SAXON_CP=/path/to/saxon-he.jar make render SCHEMA=path/to/schema.xsd
+```
+
+## Direct Saxon Usage
+
+You can run the stylesheet directly with any XSLT 3.0 processor compatible with
+the project requirements. With Saxon:
+
+```sh
+java -cp "$SAXON_CP" net.sf.saxon.Transform \
+  -s:path/to/schema.xsd \
+  -xsl:xsdstyle.xsl \
+  -o:out/index.html
+```
+
+When running directly, copy `assets/` beside the generated HTML or set
+`asset-base-uri` to the URL where the assets will be served.
+
+## Parameters
+
+Override stylesheet parameters with Saxon `name=value` arguments:
+
+```sh
+java -cp "$SAXON_CP" net.sf.saxon.Transform \
+  -s:path/to/schema.xsd \
   -xsl:xsdstyle.xsl \
   -o:out/index.html \
-  page-title="My Schema" \
-  asset-base-uri=/static/xsdstyle/ \
+  page-title="Customer API" \
   show-source=false
 ```
 
-## Localisation
+| Parameter                | Default     | Description                                                       |
+| ------------------------ | ----------- | ----------------------------------------------------------------- |
+| `page-title`             | derived     | Overrides the page title and primary heading.                     |
+| `asset-base-uri`         | `./assets/` | Prefix for `xsdstyle.css`, `xsdstyle.js`, and icon assets.        |
+| `show-source`            | `true`      | Embeds source fragments for documented components.                |
+| `documentation-markup`   | `safe`      | Renders `xs:documentation` markup in `safe` or `permissive` mode. |
+| `interface-language`     | `en`        | Sets UI language and `<html lang>`.                               |
+| `documentation-language` | `en`        | Fallback language for schema-authored prose without `xml:lang`.   |
+| `interface-direction`    | `auto`      | Sets `<html dir>`; accepts `auto`, `ltr`, or `rtl`.               |
+| `robots-noindex`         | `false`     | Emits a `noindex` robots meta tag when true.                      |
 
-The UI chrome rendered by `xsdstyle.xsl` — sidebar headings, page metadata
-labels, table column titles, button labels, occurrence tooltips, the "Show
-more / Show less" toggle, and so on — flows through a single inline message
-catalog (`xsl:variable name="i18n-messages"` near the top of Region 9). The
-active locale is picked from the `interface-language` parameter via this fallback chain:
+Invalid values are normalized to documented defaults where possible and
+reported in the generated diagnostics rather than silently ignored.
 
-1. Exact tag match (e.g. `fr-CA`)
-2. Primary subtag match (e.g. `fr`)
-3. English (`en`)
+## GitHub Action
 
-The HTML `lang="…"` attribute always reflects the caller-supplied `interface-language`
-verbatim, even when the message lookup falls back. Missing keys render as
-`[[key]]` so omissions are visible during development.
+Use the Docker-based action to publish schema documentation from a workflow:
 
-XSD content language is a separate axis, controlled by `documentation-language`. When an
-`<xs:annotation>` or `<xs:documentation>` block carries its own `@xml:lang`,
-that wins for the surrounding HTML wrapper; otherwise the wrapper falls back
-to `lang="$documentation-language"`. The chrome locale (`interface-language`) is independent and never
-shows up on the doc wrappers.
+```yaml
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bardiharborow/xsdstyle@v1
+        with:
+          xsd-file: schemas/customer.xsd
+          output-dir: out
+          output-html: index.html
+          page-title: Customer Schema
+```
 
-A small fixed-shape subset of messages is also emitted as a JSON `<script
-type="application/json" id="xsdoc-i18n">` block, which `xsdstyle.js` reads to
-localise its dynamic strings (filter status line, "Show more" toggle, aria
-labels). The script keeps a baked-in English fallback so it still works
-standalone.
+The action writes the generated HTML and copied assets into `output-dir`.
+All stylesheet parameters are available as action inputs with the same names.
 
-### Adding a locale
+## Security
 
-1. Copy the `'en':` block inside `$i18n-messages`.
-2. Change the outer key to your BCP 47 tag (lowercase; e.g. `'fr'`, `'pt-br'`).
-3. Translate the values; leave keys untouched — they are part of the contract.
-4. Test the render with `-param:interface-language=<your-tag>`.
+Schema-authored documentation is treated as untrusted input. The default
+`documentation-markup=safe` mode allowlists documentation markup, strips IDs
+that could collide with generated anchors, and rejects unsafe URL schemes.
 
-Sentences that embed `<code>` elements (such as the XSD 1.1 features list)
-are split into adjacent keys around the literal, or use the
-`emit-i18n-with-codes` named template that walks `{placeholder}` tokens and
-emits `<code>` spans inline.
+Use `documentation-markup=permissive` only for trusted schemas. It may copy
+schema-authored markup verbatim, including scripts and event-handler
+attributes.
 
-## Testing
+## Development
 
-Unit tests live in `test/*.xspec` and run under [XSpec](https://github.com/xspec/xspec), the XSLT/XQuery test framework. The Makefile vendors a pinned XSpec release into `.tools/` on first run (XSpec isn't packaged in Homebrew), and discovers Saxon from `brew install saxon`:
+Run the XSpec suite:
 
 ```sh
-brew install saxon
 make test
 ```
 
-To use a Saxon jar from elsewhere, override `SAXON_CP`:
+Run one focused XSpec file:
 
 ```sh
-SAXON_CP=/path/to/saxon-he.jar make test
+make test XSPEC_TESTS=test/example.xspec
 ```
 
-Per-run HTML reports are written to `test/xspec/` (gitignored). Run `make test-clean` to drop them.
+Run lint checks:
 
-### Dev container
+```sh
+make lint
+```
 
-A [dev container](https://containers.dev/) is provided under `.devcontainer/` that reproduces the CI toolchain — Java 21, Node 24, `xmllint`, and a version-matched Chromium + chromedriver for the accessibility audit. Open the repo in a dev-container-aware editor (VS Code "Reopen in Container") or `devcontainer up`; on first creation it pre-fetches Saxon, XSpec, `vnu.jar`, Prettier, and `@axe-core/cli` into `.tools/`, after which `make test`, `make lint`, `make render`, `make smoke-test`, and `make lint-a11y` all run out of the box.
+Format supported source files:
+
+```sh
+make format
+```
+
+Render the W3C XSD-of-XSDs and validate the generated HTML/CSS:
+
+```sh
+make smoke-test
+```
+
+Run the accessibility audit against a rendered page:
+
+```sh
+make lint-a11y
+```
+
+Behavioral changes should start with the relevant XSpec scenario. The product
+contract lives in `docs/specification.md`; `docs/architecture.md` describes the
+stylesheet pipeline; `docs/dom.md` defines the generated HTML contract.
 
 ## History
 
@@ -151,10 +176,12 @@ This project was inspired by the [xs3p](https://github.com/neeraj9/xs3p) project
 
 ## License
 
-This project is licensed under the terms of [the MIT License](LICENSE).
+This project is licensed under the terms of the [MIT License](LICENSE).
 
-## Biblography
+## Bibliography
 
 World Wide Web Consortium. (2012). _W3C XML Schema Definition Language (XSD) 1.1 Part 1: Structures_. https://www.w3.org/TR/xmlschema11-1/
+
+World Wide Web Consortium. (2012). _W3C XML Schema Definition Language (XSD) 1.1 Part 2: Datatypes_. https://www.w3.org/TR/xmlschema11-2/
 
 World Wide Web Consortium. (2017). _XSL Transformations (XSLT) Version 3.0_. https://www.w3.org/TR/xslt-30/
