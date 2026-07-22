@@ -617,20 +617,6 @@ component fall back to the localized phrases `anonymous complex type` /
 `anonymous simple type` when the owner has no name, e.g.
 `Attribute uses for anonymous complex type`.
 
-Facet tables for enumerations expose machine-readable summary state:
-
-```html
-<p class="facet-summary">
-  <span class="flag" data-flag="enumeration-count">12 enumeration values</span>
-  <span class="flag" data-flag="code-list">code list</span>
-</p>
-<div class="tbl-wrap">
-  <table class="tbl tbl--code-list" data-enumeration-count="12" data-code-list="true">
-    ...
-  </table>
-</div>
-```
-
 Every `.tbl-wrap` table wrapper is a keyboard tab stop: it carries
 `tabindex="0"`, `role="group"`, and an `aria-label` whose text mirrors the
 table's `<caption>`. Table wrappers scroll horizontally when a table overflows,
@@ -638,10 +624,7 @@ and without the tab stop a keyboard-only user could not scroll a table that
 contains no focusable content. `role="group"` (not `region`) keeps the wrapper
 out of the landmark list.
 
-The `code-list` flag and `tbl--code-list` modifier appear only when every
-facet in the restriction is an enumeration. The enumeration-count flag uses
-the singular message form (`1 enumeration value`) when exactly one
-enumeration facet is present. A facet row's ID cell contains a
+A facet row's ID cell contains a
 `<code dir="ltr"><bdi>` wrapper only when the facet declares `@id`; it stays
 empty otherwise. A facet row's Fixed cell renders
 `<span class="flag" data-flag="fixed">` when `@fixed` is true, the raw
@@ -957,8 +940,8 @@ CSS may style these semantic families:
 - Navigation: `nav-filter`, `nav-search`, `nav-group`, `nav-list`,
   `nav-link`.
 - Component articles: `cmp`, `cmp__head`, `cmp__body`, `cmp__actions`.
-- Facts: `block`, `proplist`, `tbl`, `tbl--code-list`, `tree`, `deriv`,
-  `featurelist`, `facet-summary`, `inline-type`, `inline-def`, `inline-facets`,
+- Facts: `block`, `proplist`, `tbl`, `tree`, `deriv`,
+  `featurelist`, `inline-type`, `inline-def`, `inline-facets`,
   `ic-fields`, `schemas`, `schema-row`.
 - State: `kind`, `flag`, `chip`, `xref`, `occurs`, `use` (with modifiers such
   as `use--required`), `diagnostic`.
@@ -998,8 +981,6 @@ DOM tests should assert the observable contract:
   and per-row facts (`schema-row__in`, `schema-row__version`).
 - Documentation blocks use the `doc is-clampable` / `doc__body` / `doc__toggle`
   structure with the full text present.
-- Enumeration facet tables expose `data-enumeration-count` and
-  `data-code-list`.
 - Names, QNames, and code-like values are bidi-isolated with `<bdi>`.
 - Runtime JSON contains UI strings only.
 - Search derives from visible component DOM, not a schema-data payload.

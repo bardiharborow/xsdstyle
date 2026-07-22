@@ -177,9 +177,6 @@
           and exists($x:result//article[@id eq 'ct-OrderType']//table/caption[contains(., 'Attribute uses')])
           and exists($x:result//article[@id eq 'ct-OrderType']//td/span[@class eq 'use use--required'][. eq 'required'])
           and exists($x:result//article[@id eq 'st-Status']//table/caption[contains(., 'Constraining facets')])
-          and exists($x:result//article[@id eq 'st-Status']//span[@data-flag eq 'enumeration-count'][contains(., '2')])
-          and exists($x:result//article[@id eq 'st-Status']//span[@data-flag eq 'code-list'][. eq 'Code list'])
-          and exists($x:result//article[@id eq 'st-Status']//table[@data-enumeration-count eq '2'][@data-code-list eq 'true'])
           and exists($x:result//details[@data-kind-block eq 'source'])" />
     </x:scenario>
 
@@ -423,11 +420,6 @@
   <x:scenario label="facet table details">
     <x:context>
       <xs:schema xmlns:tns="urn:example" targetNamespace="urn:example">
-        <xs:simpleType name="Solo">
-          <xs:restriction base="xs:string">
-            <xs:enumeration value="only" />
-          </xs:restriction>
-        </xs:simpleType>
         <xs:simpleType name="Sized">
           <xs:restriction base="xs:string">
             <xs:whiteSpace value="collapse" fixed="true" />
@@ -437,12 +429,6 @@
         </xs:simpleType>
       </xs:schema>
     </x:context>
-
-    <x:scenario label="a single enumeration value is described in the singular">
-      <x:expect
-        label="the enumeration-count flag uses the singular message form"
-        test="normalize-space($x:result//article[@id eq 'st-Solo']//span[@data-flag eq 'enumeration-count']) eq '1 enumeration value'" />
-    </x:scenario>
 
     <x:scenario label="facet ID cells render only when the facet declares an id">
       <x:expect

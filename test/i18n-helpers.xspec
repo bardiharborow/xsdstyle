@@ -88,10 +88,10 @@
     </x:scenario>
     <x:scenario label="a parameterised key substitutes named placeholders">
       <x:call function="f:t">
-        <x:param select="'facet.enumerationCount'" />
-        <x:param select="map { 'count': 12 }" />
+        <x:param select="'caption.facets'" />
+        <x:param select="map { 'name': 'Status' }" />
       </x:call>
-      <x:expect label="substituted count" select="'12 enumeration values'" />
+      <x:expect label="substituted name" select="'Constraining facets for Status'" />
     </x:scenario>
   </x:scenario>
 

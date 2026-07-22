@@ -417,9 +417,6 @@
           <xsl:map-entry key="'seeAlso.substitutionMembers'" select="'Substitution group members'" />
           <xsl:map-entry key="'seeAlso.substitutionHeads'" select="'Substitution group heads'" />
           <xsl:map-entry key="'seeAlso.referencedByKeyref'" select="'Referenced by keyref'" />
-          <xsl:map-entry key="'facet.enumerationCount'" select="'{count} enumeration values'" />
-          <xsl:map-entry key="'facet.enumerationCountOne'" select="'{count} enumeration value'" />
-          <xsl:map-entry key="'facet.codeList'" select="'Code list'" />
           <xsl:map-entry key="'caption.identityConstraints'" select="'Identity constraints for {name}'" />
           <xsl:map-entry key="'caption.typeAlternatives'" select="'Type alternatives for {name}'" />
           <xsl:map-entry key="'caption.facets'" select="'Constraining facets for {name}'" />
@@ -3086,27 +3083,12 @@
       select="$node//xs:restriction/*[local-name() = ('length', 'minLength', 'maxLength', 'pattern', 'enumeration', 'whiteSpace', 'maxInclusive', 'maxExclusive', 'minExclusive', 'minInclusive', 'totalDigits', 'fractionDigits', 'assertion', 'explicitTimezone')]" />
     <xsl:if test="$facets">
       <xsl:variable name="is-notation" select="f:is-notation-simple-type($node, $schemas, ())" />
-      <xsl:variable name="enum-facets" select="$facets[self::xs:enumeration]" />
-      <xsl:variable name="is-code-list" select="exists($enum-facets) and empty($facets except $enum-facets)" />
       <xsl:variable name="pattern-steps" select="$node//xs:restriction[xs:pattern]" />
       <xsl:variable
         name="table-label"
         select="f:t('caption.facets', map { 'name': (string($node/@name)[. ne ''], f:t('name.anonymousSimpleType'))[1] })" />
       <div class="{$wrap-class}" tabindex="0" role="group" aria-label="{$table-label}">
-        <xsl:if test="$enum-facets">
-          <p class="facet-summary">
-            <span class="flag" data-flag="enumeration-count">{f:t(
-                if (count($enum-facets) eq 1) then 'facet.enumerationCountOne' else 'facet.enumerationCount',
-                map { 'count': count($enum-facets) })}</span>
-            <xsl:if test="$is-code-list">
-              <span class="flag" data-flag="code-list">{f:t('facet.codeList')}</span>
-            </xsl:if>
-          </p>
-        </xsl:if>
-        <table
-          class="{if ($is-code-list) then 'tbl tbl--code-list' else 'tbl'}"
-          data-enumeration-count="{count($enum-facets)}"
-          data-code-list="{if ($is-code-list) then 'true' else 'false'}">
+        <table class="tbl">
           <caption>{$table-label}</caption>
           <thead>
             <tr>
